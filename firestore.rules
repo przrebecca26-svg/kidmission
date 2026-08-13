@@ -1,0 +1,124 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- Helpers -------------------------------------------------------
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function membership(familyId) {
+      return get(/databases/$(database)/documents/families/$(familyId)/members/$(request.auth.uid));
+    }
+
+    function isActiveMember(familyId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/families/$(familyId)/members/$(request.auth.uid))
+        && membership(familyId).data.revoked != true;
+    }
+
+    function isParent(familyId) {
+      return isActiveMember(familyId) && membership(familyId).data.role == 'parent';
+    }
+
+    // A child may only touch data under their OWN childId — never another sibling's.
+    function isSelf(familyId, childId) {
+      return isActiveMember(familyId)
+        && membership(familyId).data.role == 'child'
+        && membership(familyId).data.childId == childId;
+    }
+
+    function isParentOrSelf(familyId, childId) {
+      return isParent(familyId) || isSelf(familyId, childId);
+    }
+
+    // ---- families/{familyId} -------------------------------------------
+
+    match /families/{familyId} {
+      allow read: if isActiveMember(familyId);
+      // Created client-side during signUpParent(); ownerUid must match the creator,
+      // and only once (no overwriting an existing family document).
+      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if false; // no destructive family-level edits from the client
+    }
+
+    // ---- families/{familyId}/members/{uid} ------------------------------
+
+    match /families/{familyId}/members/{uid} {
+      // Collection-group lookups (findFamilyIdForUid) rely on being able to read
+      // your OWN membership doc, wherever it lives — never someone else's.
+      allow read: if isSignedIn() && (request.auth.uid == uid || isParent(familyId));
+
+      // A parent account creates itself during signup (uid == the doc id, role parent).
+      allow create: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.role == 'parent'
+        && request.resource.data.uid == uid;
+
+      // Child member docs are created by Maman's session (see auth.js: the write uses
+      // the PARENT's Firestore connection even though the credential itself was minted
+      // via the secondary auth app) — so this must check the caller is an existing parent,
+      // not the newly-created child.
+      allow create: if isParent(familyId)
+        && request.resource.data.role == 'child'
+        && request.resource.data.uid == uid;
+
+      // Nobody can change their own role or childId — prevents a child from
+      // promoting themselves to parent by editing their own doc.
+      allow update: if isParent(familyId)
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.uid == resource.data.uid;
+
+      allow delete: if isParent(familyId);
+    }
+
+    // ---- families/{familyId}/children/{childId} -------------------------
+    // Permanent profile: name, avatar, currency type. Separate from the login
+    // credential (members/{uid}) so resetting a code never touches this.
+
+    match /families/{familyId}/children/{childId} {
+      allow read: if isParentOrSelf(familyId, childId);
+      allow create, update: if isParent(familyId);
+      allow delete: if false; // deletion intentionally not exposed to the client
+    }
+
+    // ---- Per-child data: one document per action, never one giant blob ---
+
+    match /families/{familyId}/children/{childId}/settings/{doc} {
+      allow read: if isParentOrSelf(familyId, childId);
+      allow write: if isParent(familyId);
+    }
+
+    match /families/{familyId}/children/{childId}/entries/{entryId} {
+      allow read: if isParentOrSelf(familyId, childId);
+      // A child can only create their OWN pending entries — status is forced to
+      // "pending" and createdBy/createdAt must be their own uid + a server timestamp,
+      // so they can't backdate an entry or mark it pre-approved.
+      allow create: if isParent(familyId)
+        || (isSelf(familyId, childId)
+            && request.resource.data.status == 'pending'
+            && request.resource.data.createdBy == request.auth.uid
+            && request.resource.data.createdAt == request.time);
+      allow update: if isParent(familyId); // only Maman approves/rejects/edits
+      allow delete: if isParent(familyId);
+    }
+
+    match /families/{familyId}/children/{childId}/payments/{paymentId} {
+      // Versements are Maman-only end to end — a child never needs to see them
+      // to use the app day-to-day, and definitely shouldn't create/edit them.
+      allow read, write: if isParent(familyId);
+    }
+
+    match /families/{familyId}/children/{childId}/rewardClaims/{claimId} {
+      allow read: if isParentOrSelf(familyId, childId);
+      allow create: if isParent(familyId)
+        || (isSelf(familyId, childId)
+            && request.resource.data.status == 'pending'
+            && request.resource.data.createdBy == request.auth.uid
+            && request.resource.data.createdAt == request.time);
+      allow update: if isParent(familyId); // only Maman approves/rejects
+      allow delete: if isParent(familyId);
+    }
+  }
+}
