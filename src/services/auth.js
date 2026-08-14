@@ -18,6 +18,10 @@ export function setCachedFamilyId(familyId) {
   try { localStorage.setItem(FAMILY_ID_CACHE_KEY, familyId); } catch { /* ignore */ }
 }
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Finds which family a signed-in user belongs to. Member documents store their own
  * uid as a field (in addition to being the doc ID) specifically so this collection-group
@@ -25,16 +29,30 @@ export function setCachedFamilyId(familyId) {
  * family" any other way. The security rule mirrors this: a members doc is only
  * readable when resource.data.uid == request.auth.uid, so this query can only ever
  * return the caller's own membership, never anyone else's.
+ *
+ * Retries once on permission-denied: on some mobile WebKit browsers (iOS Safari/Chrome,
+ * both WebKit under the hood), Firestore's request can fire a beat before the freshly
+ * signed-in auth token is fully attached to outgoing requests, causing a spurious
+ * permission-denied immediately after a successful sign-in. A short retry clears it up
+ * without the user ever noticing.
  */
-export async function findFamilyIdForUid(uid) {
+export async function findFamilyIdForUid(uid, _isRetry = false) {
   const cached = getCachedFamilyId();
   if (cached) return cached;
-  const q = query(collectionGroup(db, "members"), where("uid", "==", uid), limit(1));
-  const snap = await getDocs(q);
-  if (snap.empty) return null;
-  const familyId = snap.docs[0].ref.parent.parent.id;
-  setCachedFamilyId(familyId);
-  return familyId;
+  try {
+    const q = query(collectionGroup(db, "members"), where("uid", "==", uid), limit(1));
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+    const familyId = snap.docs[0].ref.parent.parent.id;
+    setCachedFamilyId(familyId);
+    return familyId;
+  } catch (err) {
+    if (err.code === "permission-denied" && !_isRetry) {
+      await delay(400);
+      return findFamilyIdForUid(uid, true);
+    }
+    throw err;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -74,6 +92,10 @@ export async function signUpParent({ email, password, displayName, familyId }) {
 
 export async function loginParent({ email, password }) {
   const cred = await signInWithEmailAndPassword(auth, email, password);
+  // Force the fresh ID token to be attached to the SDK's outgoing requests before
+  // querying Firestore — see findFamilyIdForUid's comment for why this matters on
+  // mobile WebKit browsers right after sign-in.
+  await cred.user.getIdToken(true);
   const familyId = await findFamilyIdForUid(cred.user.uid);
   return { uid: cred.user.uid, familyId };
 }
@@ -162,6 +184,7 @@ export async function resetChildCode({ familyId, childId, oldUid, username, newC
 export async function loginChild({ familyId, username, code }) {
   const technicalEmail = technicalChildEmail(familyId, username);
   const cred = await signInWithEmailAndPassword(auth, technicalEmail, code);
+  await cred.user.getIdToken(true);
   setCachedFamilyId(familyId);
   return cred.user.uid;
 }
