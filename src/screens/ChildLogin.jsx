@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { loginChild, getCachedFamilyId } from "../services/auth.js";
 import { translateFirebaseError } from "./SignupParent.jsx";
+import { useLang, LanguageSwitcher } from "../i18n.jsx";
 
 export default function ChildLogin({ onBack, onLoggedIn }) {
+  const { lang, setLang, t, dir } = useLang();
   const cachedFamilyId = getCachedFamilyId();
   const [familyId, setFamilyId] = useState(cachedFamilyId || "");
   const [username, setUsername] = useState("");
@@ -14,7 +16,7 @@ export default function ChildLogin({ onBack, onLoggedIn }) {
     e.preventDefault();
     setError(null);
     if (!familyId.trim() || !username.trim() || code.length !== 6) {
-      setError("Vérifie que tout est bien rempli (le code fait 6 chiffres).");
+      setError(t("checkAllFilled"));
       return;
     }
     setLoading(true);
@@ -22,30 +24,33 @@ export default function ChildLogin({ onBack, onLoggedIn }) {
       await loginChild({ familyId: familyId.trim(), username: username.trim(), code });
       onLoggedIn();
     } catch (err) {
-      setError(translateFirebaseError(err));
+      setError(translateFirebaseError(err, lang));
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="auth-screen">
+    <div dir={dir} className="auth-screen">
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+        <LanguageSwitcher lang={lang} setLang={setLang} />
+      </div>
       <div className="auth-card">
-        <h2 className="disp auth-title">🧒 C'est toi ?</h2>
+        <h2 className="disp auth-title">{t("isThisYou")}</h2>
         {error && <div className="error-banner">{error}</div>}
         <form onSubmit={handleSubmit}>
           {!cachedFamilyId && (
             <div className="field">
-              <label>Code famille (donné par Maman)</label>
+              <label>{t("familyCodeLabel")}</label>
               <input value={familyId} onChange={(e) => setFamilyId(e.target.value)} placeholder="famille-perez" />
             </div>
           )}
           <div className="field">
-            <label>Ton identifiant</label>
+            <label>{t("yourUsername")}</label>
             <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="shyrel" autoCapitalize="none" />
           </div>
           <div className="field">
-            <label>Ton code (6 chiffres)</label>
+            <label>{t("yourCode")}</label>
             <input
               inputMode="numeric" type="password" value={code}
               onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
@@ -53,10 +58,10 @@ export default function ChildLogin({ onBack, onLoggedIn }) {
             />
           </div>
           <button className="btn-primary" type="submit" disabled={loading}>
-            {loading ? "Connexion…" : "C'est parti !"}
+            {loading ? t("connecting") : t("letsGo")}
           </button>
         </form>
-        <button className="link-btn" onClick={onBack}>← Retour</button>
+        <button className="link-btn" onClick={onBack}>{t("back")}</button>
       </div>
     </div>
   );
