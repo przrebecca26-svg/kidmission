@@ -7,12 +7,14 @@ import ChildLogin from "./screens/ChildLogin.jsx";
 import FamilyHome from "./screens/FamilyHome.jsx";
 import ChildHome from "./screens/ChildHome.jsx";
 import ChildSettings from "./screens/ChildSettings.jsx";
+import ChildPayments from "./screens/ChildPayments.jsx";
 
 export default function App() {
   const auth = useAuth();
   const [screen, setScreen] = useState("welcome"); // welcome | signup | login | childLogin
   const [openChildId, setOpenChildId] = useState(null);
   const [settingsChildId, setSettingsChildId] = useState(null);
+  const [paymentsChildId, setPaymentsChildId] = useState(null);
 
   if (auth === undefined) {
     return (
@@ -34,11 +36,36 @@ export default function App() {
     if (settingsChildId) {
       return <ChildSettings familyId={auth.familyId} childId={settingsChildId} onBack={() => setSettingsChildId(null)} />;
     }
-    if (openChildId) {
-      return <ChildHome familyId={auth.familyId} childId={openChildId} />; // Maman previewing a child's carnet — same view for now
+    if (paymentsChildId) {
+      return (
+        <ChildPayments
+          familyId={auth.familyId}
+          childId={paymentsChildId}
+          uid={auth.uid}
+          onBack={() => setPaymentsChildId(null)}
+        />
+      );
     }
-    return <FamilyHome familyId={auth.familyId} onOpenChild={setOpenChildId} onOpenSettings={setSettingsChildId} />;
+    if (openChildId) {
+      return (
+        <ChildHome
+          familyId={auth.familyId}
+          childId={openChildId}
+          uid={auth.uid}
+          isParent={true}
+          onBack={() => setOpenChildId(null)}
+        />
+      );
+    }
+    return (
+      <FamilyHome
+        familyId={auth.familyId}
+        onOpenChild={setOpenChildId}
+        onOpenSettings={setSettingsChildId}
+        onOpenPayments={setPaymentsChildId}
+      />
+    );
   }
 
-  return <ChildHome familyId={auth.familyId} childId={auth.childId} />;
+  return <ChildHome familyId={auth.familyId} childId={auth.childId} uid={auth.uid} isParent={false} />;
 }
