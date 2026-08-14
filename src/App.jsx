@@ -8,6 +8,7 @@ import FamilyHome from "./screens/FamilyHome.jsx";
 import ChildHome from "./screens/ChildHome.jsx";
 import ChildSettings from "./screens/ChildSettings.jsx";
 import ChildPayments from "./screens/ChildPayments.jsx";
+import ChildAccess from "./screens/ChildAccess.jsx";
 
 export default function App() {
   const auth = useAuth();
@@ -15,6 +16,7 @@ export default function App() {
   const [openChildId, setOpenChildId] = useState(null);
   const [settingsChildId, setSettingsChildId] = useState(null);
   const [paymentsChildId, setPaymentsChildId] = useState(null);
+  const [accessChildId, setAccessChildId] = useState(null);
 
   if (auth === undefined) {
     return (
@@ -46,6 +48,15 @@ export default function App() {
         />
       );
     }
+    if (accessChildId) {
+      return (
+        <ChildAccess
+          familyId={auth.familyId}
+          childId={accessChildId}
+          onBack={() => setAccessChildId(null)}
+        />
+      );
+    }
     if (openChildId) {
       return (
         <ChildHome
@@ -63,6 +74,7 @@ export default function App() {
         onOpenChild={setOpenChildId}
         onOpenSettings={setSettingsChildId}
         onOpenPayments={setPaymentsChildId}
+        onOpenAccess={setAccessChildId}
       />
     );
   }
