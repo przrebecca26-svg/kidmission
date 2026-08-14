@@ -84,13 +84,13 @@ export default function FamilyHome({ familyId, onOpenChild, onOpenSettings, onOp
       </div>
 
       {showAdd && (
-        <AddChildModal familyId={familyId} onClose={() => setShowAdd(false)} t={t} currencyOptions={CURRENCY_OPTIONS} />
+        <AddChildModal familyId={familyId} onClose={() => setShowAdd(false)} t={t} lang={lang} currencyOptions={CURRENCY_OPTIONS} />
       )}
     </div>
   );
 }
 
-function AddChildModal({ familyId, onClose, t, currencyOptions }) {
+function AddChildModal({ familyId, onClose, t, lang, currencyOptions }) {
   const [step, setStep] = useState("profile"); // "profile" | "login" | "done"
   const [displayName, setDisplayName] = useState("");
   const [currency, setCurrency] = useState(currencyOptions[0]);
@@ -114,7 +114,7 @@ function AddChildModal({ familyId, onClose, t, currencyOptions }) {
       setUsername(displayName.trim().toLowerCase().replace(/[^a-z0-9]/g, ""));
       setStep("login");
     } catch (err) {
-      setError(translateFirebaseError(err));
+      setError(translateFirebaseError(err, lang));
     } finally {
       setLoading(false);
     }
@@ -129,7 +129,7 @@ function AddChildModal({ familyId, onClose, t, currencyOptions }) {
       await createChildLogin({ familyId, childId, username: username.trim(), code });
       setStep("done");
     } catch (err) {
-      setError(translateFirebaseError(err));
+      setError(translateFirebaseError(err, lang));
     } finally {
       setLoading(false);
     }
