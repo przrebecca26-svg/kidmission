@@ -17,10 +17,7 @@ export default function LoginParent({ onBack, onLoggedIn, onGoSignup }) {
       await loginParent({ email: email.trim(), password });
       onLoggedIn();
     } catch (err) {
-      // Temporary debug log — remove once the mobile login issue is diagnosed.
-      // eslint-disable-next-line no-console
-      console.error("LOGIN ERROR:", err.code, err.message, err);
-      setError(translateFirebaseError(err));
+      setError(`[${err.code || "no-code"}] ${err.message || String(err)}`);
     } finally {
       setLoading(false);
     }
@@ -40,7 +37,7 @@ export default function LoginParent({ onBack, onLoggedIn, onGoSignup }) {
     <div className="auth-screen">
       <div className="auth-card">
         <h2 className="disp auth-title">Bon retour 👩</h2>
-        {error && <div className="error-banner">{error}</div>}
+        {error && <div className="error-banner" style={{ wordBreak: "break-word", fontFamily: "var(--font-mono)", fontSize: 11.5 }}>{error}</div>}
         {resetSent && <div className="error-banner" style={{ background: "rgba(92,140,90,0.1)", color: "var(--green)" }}>Email envoyé — vérifie ta boîte mail.</div>}
         <form onSubmit={handleSubmit}>
           <div className="field">
