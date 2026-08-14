@@ -1,27 +1,29 @@
 import { useEffect, useState } from "react";
 import { watchChildProfile, watchSettings, saveSettings } from "../services/firestore.js";
+import { BUILTIN_CATALOG, HOUSE_RULES, PAYMENT_RULE } from "../data/missionCatalog.js";
+import { translateFrToHe, translateHeToFr } from "../services/translate.js";
 
-const CATEGORIES = [
-  { key: "bonus", label: "✅ Bonus" },
-  { key: "malus", label: "⚠️ Malus" },
-  { key: "weekly", label: "📅 Hebdo" },
-  { key: "joker", label: "🃏 Joker" },
+const TABS = [
+  { key: "bonus", label: "✅ Bonus", valueLabel: "Montant", sign: "+" },
+  { key: "malus", label: "⚠️ Malus", valueLabel: "Retrait", sign: "-" },
+  { key: "weekly", label: "🏆 Hebdo", valueLabel: "Montant", sign: "+" },
+  { key: "jokerEarn", label: "⭐ Gagner Jokers", valueLabel: "Jokers gagnés", sign: "+", unit: "🃏" },
+  { key: "jokerUse", label: "🎁 Utiliser Jokers", valueLabel: "Coût en Jokers", sign: "-", unit: "🃏" },
+  { key: "reward", label: "👑 Récompenses", valueLabel: "Seuil", sign: "" },
+  { key: "rules", label: "📜 Règles", readOnly: true },
 ];
 
 /**
- * Parent-only screen: manage the catalog of mission items (bonus/malus/weekly/joker)
- * for one child. Items live in settings/config as a single array — small enough that
- * read-modify-write on the whole array is simpler than one doc per item, and avoids
- * a second Firestore listener pattern just for this.
- *
- * This screen only edits the CATALOG. Actually logging a day's bonus/malus (creating
- * `entries` documents from these items) is the next screen to port.
+ * Parent-only screen: the family's mission catalog (bonus/malus/weekly/jokers/rewards),
+ * preloaded with Rebecca's original list. Builtin items are toggled on/off with a
+ * checkbox (unchecked by default) rather than retyped; parents can also add fully
+ * custom items, which get auto-translated FR<->HE via a free translation API.
  */
 export default function ChildSettings({ familyId, childId, onBack }) {
   const [profile, setProfile] = useState(undefined);
   const [settings, setSettings] = useState(undefined);
-  const [activeCat, setActiveCat] = useState("bonus");
-  const [editingItem, setEditingItem] = useState(null); // null | "new" | item object
+  const [activeTab, setActiveTab] = useState("bonus");
+  const [editingItem, setEditingItem] = useState(null); // null | "new" | custom item object
 
   useEffect(() => watchChildProfile(familyId, childId, setProfile), [familyId, childId]);
   useEffect(() => {
@@ -30,24 +32,33 @@ export default function ChildSettings({ familyId, childId, onBack }) {
     return () => unsub && unsub();
   }, [familyId, childId]);
 
-  const items = settings?.items || [];
-  const itemsForCat = items.filter((it) => it.cat === activeCat);
+  const enabledIds = settings?.enabledIds || {};
+  const customItems = settings?.customItems || [];
+  const tab = TABS.find((t) => t.key === activeTab);
+  const unit = tab?.unit || profile?.currencyUnit || "";
 
-  async function persistItems(nextItems) {
-    await saveSettings(familyId, childId, { items: nextItems });
+  async function persist(nextEnabledIds, nextCustomItems) {
+    await saveSettings(familyId, childId, {
+      enabledIds: nextEnabledIds ?? enabledIds,
+      customItems: nextCustomItems ?? customItems,
+    });
   }
 
-  async function handleSaveItem(item) {
-    const exists = items.some((it) => it.id === item.id);
-    const nextItems = exists
-      ? items.map((it) => (it.id === item.id ? item : it))
-      : [...items, item];
-    await persistItems(nextItems);
+  function toggleBuiltin(id) {
+    persist({ ...enabledIds, [id]: !enabledIds[id] });
+  }
+
+  async function handleSaveCustomItem(item) {
+    const exists = customItems.some((it) => it.id === item.id);
+    const next = exists
+      ? customItems.map((it) => (it.id === item.id ? item : it))
+      : [...customItems, item];
+    await persist(undefined, next);
     setEditingItem(null);
   }
 
-  async function handleDeleteItem(itemId) {
-    await persistItems(items.filter((it) => it.id !== itemId));
+  async function handleDeleteCustomItem(itemId) {
+    await persist(undefined, customItems.filter((it) => it.id !== itemId));
   }
 
   if (profile === undefined || settings === undefined) {
@@ -57,6 +68,9 @@ export default function ChildSettings({ familyId, childId, onBack }) {
       </div>
     );
   }
+
+  const builtinForTab = tab?.readOnly ? [] : BUILTIN_CATALOG[activeTab] || [];
+  const customForTab = tab?.readOnly ? [] : customItems.filter((it) => it.cat === activeTab);
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--pink-bg)", paddingBottom: 40 }}>
@@ -73,64 +87,64 @@ export default function ChildSettings({ familyId, childId, onBack }) {
       </div>
 
       <div style={{ padding: "16px 16px 0" }}>
-        <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
-          {CATEGORIES.map((c) => (
+        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+          {TABS.map((t) => (
             <button
-              key={c.key}
-              onClick={() => setActiveCat(c.key)}
+              key={t.key}
+              onClick={() => setActiveTab(t.key)}
               style={{
                 flex: "0 0 auto", padding: "8px 14px", borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap",
-                border: activeCat === c.key ? "2px solid var(--pink-header)" : "1px solid var(--pink-input-border)",
-                background: activeCat === c.key ? "rgba(214,49,124,0.08)" : "var(--pink-card)",
+                border: activeTab === t.key ? "2px solid var(--pink-header)" : "1px solid var(--pink-input-border)",
+                background: activeTab === t.key ? "rgba(214,49,124,0.08)" : "var(--pink-card)",
                 color: "var(--text-main)",
               }}
             >
-              {c.label}
+              {t.label}
             </button>
           ))}
         </div>
       </div>
 
-      <div style={{ padding: "16px 16px 0" }}>
-        {itemsForCat.length === 0 && (
-          <p style={{ color: "var(--text-faint)", textAlign: "center", padding: 20, fontSize: 14 }}>
-            Aucun item dans cette catégorie pour l'instant.
-          </p>
-        )}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {itemsForCat.map((item) => (
-            <div
-              key={item.id}
-              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 12, padding: "12px 14px" }}
-            >
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{item.fr}</div>
-                {item.he && <div dir="rtl" style={{ fontSize: 12, color: "var(--text-faint)" }}>{item.he}</div>}
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span
-                  className="mono"
-                  style={{ fontSize: 14, fontWeight: 600, color: item.amt < 0 ? "var(--red)" : "var(--green)" }}
-                >
-                  {item.amt > 0 ? "+" : ""}{item.amt} {profile?.currencyUnit}
-                </span>
-                <button onClick={() => setEditingItem(item)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15 }}>✏️</button>
-                <button onClick={() => handleDeleteItem(item.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15 }}>🗑️</button>
-              </div>
-            </div>
-          ))}
-        </div>
+      {tab.readOnly ? (
+        <RulesPanel />
+      ) : (
+        <div style={{ padding: "16px 16px 0" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {builtinForTab.map((item) => (
+              <BuiltinRow
+                key={item.id}
+                item={item}
+                checked={!!enabledIds[item.id]}
+                onToggle={() => toggleBuiltin(item.id)}
+                sign={tab.sign}
+                unit={unit}
+              />
+            ))}
+            {customForTab.map((item) => (
+              <CustomRow
+                key={item.id}
+                item={item}
+                sign={tab.sign}
+                unit={unit}
+                onEdit={() => setEditingItem(item)}
+                onDelete={() => handleDeleteCustomItem(item.id)}
+              />
+            ))}
+          </div>
 
-        <button className="btn-primary" style={{ marginTop: 16 }} onClick={() => setEditingItem("new")}>
-          + Ajouter un item {CATEGORIES.find((c) => c.key === activeCat)?.label}
-        </button>
-      </div>
+          <button className="btn-primary" style={{ marginTop: 16 }} onClick={() => setEditingItem("new")}>
+            + Ajouter un item personnalisé
+          </button>
+        </div>
+      )}
 
       {editingItem && (
         <ItemModal
           item={editingItem === "new" ? null : editingItem}
-          defaultCat={activeCat}
-          onSave={handleSaveItem}
+          cat={activeTab}
+          valueLabel={tab.valueLabel}
+          unit={unit}
+          onSave={handleSaveCustomItem}
           onClose={() => setEditingItem(null)}
         />
       )}
@@ -138,29 +152,101 @@ export default function ChildSettings({ familyId, childId, onBack }) {
   );
 }
 
-function ItemModal({ item, defaultCat, onSave, onClose }) {
+function BuiltinRow({ item, checked, onToggle, sign, unit }) {
+  return (
+    <label
+      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 12, padding: "12px 14px", cursor: "pointer" }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+        <input type="checkbox" checked={checked} onChange={onToggle} style={{ width: 18, height: 18, flex: "0 0 auto" }} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>{item.fr}</div>
+          <div dir="rtl" style={{ fontSize: 12, color: "var(--text-faint)" }}>{item.he}</div>
+        </div>
+      </div>
+      <span className="mono" style={{ fontSize: 13.5, fontWeight: 600, color: sign === "-" ? "var(--red)" : "var(--green)", flex: "0 0 auto", marginLeft: 8 }}>
+        {sign}{item.val} {unit}
+      </span>
+    </label>
+  );
+}
+
+function CustomRow({ item, sign, unit, onEdit, onDelete }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--pink-card)", border: "1px dashed var(--pink-header)", borderRadius: 12, padding: "12px 14px" }}>
+      <div>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>{item.fr}</div>
+        {item.he && <div dir="rtl" style={{ fontSize: 12, color: "var(--text-faint)" }}>{item.he}</div>}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span className="mono" style={{ fontSize: 13.5, fontWeight: 600, color: sign === "-" ? "var(--red)" : "var(--green)" }}>
+          {sign}{item.val} {unit}
+        </span>
+        <button onClick={onEdit} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15 }}>✏️</button>
+        <button onClick={onDelete} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15 }}>🗑️</button>
+      </div>
+    </div>
+  );
+}
+
+function RulesPanel() {
+  return (
+    <div style={{ padding: "16px 16px 0" }}>
+      <div style={{ background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 14, padding: "16px 16px", marginBottom: 14 }}>
+        <h3 className="disp" style={{ margin: "0 0 10px", fontSize: 16 }}>💳 Versement</h3>
+        <p style={{ fontSize: 13.5, margin: "0 0 6px" }}>{PAYMENT_RULE.fr}</p>
+        <p dir="rtl" style={{ fontSize: 12.5, color: "var(--text-faint)", margin: 0 }}>{PAYMENT_RULE.he}</p>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {HOUSE_RULES.map((rule, i) => (
+          <div key={i} style={{ background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 12, padding: "12px 14px" }}>
+            <p style={{ fontSize: 13.5, margin: "0 0 4px" }}>✅ {rule.fr}</p>
+            <p dir="rtl" style={{ fontSize: 12.5, color: "var(--text-faint)", margin: 0 }}>✅ {rule.he}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ItemModal({ item, cat, valueLabel, unit, onSave, onClose }) {
   const [fr, setFr] = useState(item?.fr || "");
   const [he, setHe] = useState(item?.he || "");
-  const [amt, setAmt] = useState(item ? Math.abs(item.amt).toString() : "");
-  const [cat, setCat] = useState(item?.cat || defaultCat);
+  const [val, setVal] = useState(item ? item.val.toString() : "");
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [translating, setTranslating] = useState(null); // "fr" | "he" | null
+
+  async function handleFrBlur() {
+    if (!fr.trim() || he.trim()) return;
+    setTranslating("he");
+    const result = await translateFrToHe(fr);
+    if (result) setHe(result);
+    setTranslating(null);
+  }
+
+  async function handleHeBlur() {
+    if (!he.trim() || fr.trim()) return;
+    setTranslating("fr");
+    const result = await translateHeToFr(he);
+    if (result) setFr(result);
+    setTranslating(null);
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError(null);
-    const parsedAmt = parseFloat(amt.replace(",", "."));
+    const parsedVal = parseFloat(val.replace(",", "."));
     if (!fr.trim()) { setError("Donne au moins un libellé en français."); return; }
-    if (isNaN(parsedAmt) || parsedAmt <= 0) { setError("Le montant doit être un nombre positif."); return; }
+    if (isNaN(parsedVal) || parsedVal <= 0) { setError("La valeur doit être un nombre positif."); return; }
 
     setSaving(true);
     try {
-      const signedAmt = cat === "malus" ? -parsedAmt : parsedAmt;
       await onSave({
-        id: item?.id || `item-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        id: item?.id || `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         fr: fr.trim(),
         he: he.trim(),
-        amt: signedAmt,
+        val: parsedVal,
         cat,
       });
     } finally {
@@ -175,39 +261,22 @@ function ItemModal({ item, defaultCat, onSave, onClose }) {
         {error && <div className="error-banner">{error}</div>}
         <form onSubmit={handleSubmit}>
           <div className="field">
-            <label>Catégorie</label>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {CATEGORIES.map((c) => (
-                <button
-                  type="button" key={c.key} onClick={() => setCat(c.key)}
-                  style={{
-                    flex: "0 0 auto", padding: "8px 12px", borderRadius: 10, fontSize: 12, cursor: "pointer",
-                    border: cat === c.key ? "2px solid var(--pink-header)" : "1px solid var(--pink-input-border)",
-                    background: cat === c.key ? "rgba(214,49,124,0.08)" : "transparent",
-                  }}
-                >
-                  {c.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="field">
             <label>Libellé (français)</label>
-            <input value={fr} onChange={(e) => setFr(e.target.value)} placeholder="Ranger sa chambre" />
+            <input value={fr} onChange={(e) => setFr(e.target.value)} onBlur={handleFrBlur} placeholder="Ranger sa chambre" />
           </div>
           <div className="field">
-            <label>Libellé (hébreu) — optionnel</label>
-            <input dir="rtl" value={he} onChange={(e) => setHe(e.target.value)} placeholder="לסדר את החדר" />
+            <label>Libellé (hébreu) {translating === "he" && "— traduction…"}</label>
+            <input dir="rtl" value={he} onChange={(e) => setHe(e.target.value)} onBlur={handleHeBlur} placeholder="לסדר את החדר" />
           </div>
           <div className="field">
-            <label>Montant (toujours positif — le signe est automatique selon la catégorie)</label>
+            <label>{valueLabel} {unit ? `(${unit})` : ""}</label>
             <input
-              inputMode="decimal" value={amt}
-              onChange={(e) => setAmt(e.target.value.replace(/[^0-9.,]/g, ""))}
+              inputMode="decimal" value={val}
+              onChange={(e) => setVal(e.target.value.replace(/[^0-9.,]/g, ""))}
               placeholder="5"
             />
           </div>
-          <button className="btn-primary" type="submit" disabled={saving}>
+          <button className="btn-primary" type="submit" disabled={saving || translating}>
             {saving ? "…" : "Enregistrer"}
           </button>
         </form>
