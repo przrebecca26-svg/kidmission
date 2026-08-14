@@ -4,11 +4,15 @@ import {
   watchRewardClaims, claimReward, approveRewardClaim, rejectRewardClaim,
 } from "../services/firestore.js";
 import { logout } from "../services/auth.js";
+import { getItemLabel } from "../services/translate.js";
 import { BUILTIN_CATALOG } from "../data/missionCatalog.js";
+import { useLang, LanguageSwitcher } from "../i18n.js";
 
 const MISSION_CATS = ["bonus", "malus", "weekly"];
 const JOKER_CATS = ["jokerEarn", "jokerUse"];
 const REWARD_CATS = ["reward"];
+
+const LOCALES = { fr: "fr-FR", he: "he-IL", en: "en-GB", ru: "ru-RU" };
 
 function signFor(cat) {
   return cat === "malus" || cat === "jokerUse" ? -1 : 1;
@@ -24,12 +28,23 @@ function currentPeriodKey() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function formatDate(ts) {
+function formatDate(ts, lang) {
   if (!ts?.toDate) return "…";
-  return ts.toDate().toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return ts.toDate().toLocaleDateString(LOCALES[lang] || "fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+function useItemLabel(item, lang) {
+  const [label, setLabel] = useState(lang === "he" ? (item.he || item.fr) : item.fr);
+  useEffect(() => {
+    let alive = true;
+    getItemLabel(item, lang).then((l) => { if (alive) setLabel(l); });
+    return () => { alive = false; };
+  }, [item.id, item.fr, item.he, lang]);
+  return label;
 }
 
 export default function ChildHome({ familyId, childId, uid, isParent, onBack }) {
+  const { lang, setLang, t, dir } = useLang();
   const [profile, setProfile] = useState(undefined);
   const [settings, setSettings] = useState(undefined);
   const [entries, setEntries] = useState(undefined);
@@ -49,7 +64,7 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
   if (profile === undefined || settings === undefined || entries === undefined || claims === undefined) {
     return (
       <div style={{ minHeight: "100vh", background: "var(--pink-bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <p style={{ color: "var(--text-faint)" }}>Chargement…</p>
+        <p style={{ color: "var(--text-faint)" }}>{t("loading")}</p>
       </div>
     );
   }
@@ -57,7 +72,7 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
   if (profile === null) {
     return (
       <div style={{ minHeight: "100vh", background: "var(--pink-bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <p>Profil introuvable.</p>
+        <p>{t("profileNotFound")}</p>
       </div>
     );
   }
@@ -108,13 +123,16 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
   ].sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--pink-bg)", paddingBottom: 40 }}>
+    <div dir={dir} style={{ minHeight: "100vh", background: "var(--pink-bg)", paddingBottom: 40 }}>
       <div style={{ background: "var(--pink-header)", color: "#fff", padding: "calc(20px + env(safe-area-inset-top)) 20px 18px", borderBottomLeftRadius: 20, borderBottomRightRadius: 20 }}>
-        {onBack && (
-          <button onClick={onBack} style={{ background: "none", border: "none", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0, marginBottom: 8 }}>
-            ← Retour
-          </button>
-        )}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          {onBack ? (
+            <button onClick={onBack} style={{ background: "none", border: "none", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0, marginBottom: 8 }}>
+              {t("back")}
+            </button>
+          ) : <span />}
+          <LanguageSwitcher lang={lang} setLang={setLang} />
+        </div>
         <h1 className="disp" style={{ fontSize: 22, margin: "0 0 10px" }}>🧒 {profile.displayName}</h1>
         <div style={{ display: "flex", gap: 8 }}>
           <span style={{ background: "rgba(255,255,255,0.18)", borderRadius: 999, padding: "6px 12px", fontSize: 13, fontWeight: 700 }} className="mono">
@@ -129,22 +147,22 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
       <div style={{ padding: "16px 16px 0" }}>
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
           {[
-            { key: "missions", label: "🎯 Missions" },
-            { key: "jokers", label: "🃏 Jokers" },
-            { key: "rewards", label: "👑 Récompenses" },
-            { key: "requests", label: "📋 Mes demandes" },
-          ].map((t) => (
+            { key: "missions", label: t("tabMissions") },
+            { key: "jokers", label: t("tabJokers") },
+            { key: "rewards", label: t("tabRewards") },
+            { key: "requests", label: t("tabRequests") },
+          ].map((tab) => (
             <button
-              key={t.key}
-              onClick={() => setActiveTab(t.key)}
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
               style={{
                 flex: "0 0 auto", padding: "8px 14px", borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap",
-                border: activeTab === t.key ? "2px solid var(--pink-header)" : "1px solid var(--pink-input-border)",
-                background: activeTab === t.key ? "rgba(214,49,124,0.08)" : "var(--pink-card)",
+                border: activeTab === tab.key ? "2px solid var(--pink-header)" : "1px solid var(--pink-input-border)",
+                background: activeTab === tab.key ? "rgba(214,49,124,0.08)" : "var(--pink-card)",
                 color: "var(--text-main)",
               }}
             >
-              {t.label}
+              {tab.label}
             </button>
           ))}
         </div>
@@ -152,17 +170,17 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
 
       <div style={{ padding: "16px 16px 0" }}>
         {activeTab === "missions" && (
-          <MissionList items={itemsFor(MISSION_CATS)} currencyUnit={profile.currencyUnit} onAct={handleDeclare} busyId={busyId} isParent={isParent} />
+          <MissionList items={itemsFor(MISSION_CATS)} currencyUnit={profile.currencyUnit} onAct={handleDeclare} busyId={busyId} isParent={isParent} lang={lang} t={t} />
         )}
         {activeTab === "jokers" && (
-          <MissionList items={itemsFor(JOKER_CATS)} currencyUnit={profile.currencyUnit} onAct={handleDeclare} busyId={busyId} isParent={isParent} />
+          <MissionList items={itemsFor(JOKER_CATS)} currencyUnit={profile.currencyUnit} onAct={handleDeclare} busyId={busyId} isParent={isParent} lang={lang} t={t} />
         )}
         {activeTab === "rewards" && (
-          <RewardList items={itemsFor(REWARD_CATS)} currencyUnit={profile.currencyUnit} onAct={handleClaim} busyId={busyId} isParent={isParent} />
+          <RewardList items={itemsFor(REWARD_CATS)} currencyUnit={profile.currencyUnit} onAct={handleClaim} busyId={busyId} isParent={isParent} lang={lang} t={t} />
         )}
         {activeTab === "requests" && (
           <RequestList
-            list={requestList} isParent={isParent}
+            list={requestList} isParent={isParent} lang={lang} t={t}
             onApproveEntry={(id) => approveEntry(familyId, childId, id)}
             onRejectEntry={(id) => rejectOrDeleteEntry(familyId, childId, id)}
             onApproveClaim={(id) => approveRewardClaim(familyId, childId, id)}
@@ -172,122 +190,139 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
       </div>
 
       <div style={{ padding: "20px 16px 0", textAlign: "center" }}>
-        <button className="link-btn" onClick={logout}>Déconnexion</button>
+        <button className="link-btn" onClick={logout}>{t("logout")}</button>
       </div>
     </div>
   );
 }
 
-function MissionList({ items, currencyUnit, onAct, busyId, isParent }) {
-  if (items.length === 0) {
-    return <p style={{ color: "var(--text-faint)", textAlign: "center", padding: 20, fontSize: 14 }}>Aucune mission activée ici — demande à Maman d'en cocher dans Réglages.</p>;
-  }
+function MissionRow({ item, currencyUnit, onAct, busyId, isParent, lang, t }) {
+  const label = useItemLabel(item, lang);
+  const sign = signFor(item.cat);
+  const unit = unitFor(item, currencyUnit);
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {items.map((item) => {
-        const sign = signFor(item.cat);
-        const unit = unitFor(item, currencyUnit);
-        return (
-          <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 12, padding: "12px 14px", gap: 10 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>{item.fr}</div>
-              {item.he && <div dir="rtl" style={{ fontSize: 12, color: "var(--text-faint)" }}>{item.he}</div>}
-              <div className="mono" style={{ fontSize: 12.5, fontWeight: 600, color: sign < 0 ? "var(--red)" : "var(--green)", marginTop: 2 }}>
-                {sign > 0 ? "+" : "-"}{item.val} {unit}
-              </div>
-            </div>
-            <button
-              className="btn-primary" style={{ width: "auto", flex: "0 0 auto", padding: "8px 14px", fontSize: 13 }}
-              disabled={busyId === item.id}
-              onClick={() => onAct(item)}
-            >
-              {busyId === item.id ? "…" : isParent ? "✅ Enregistrer" : "Déclarer"}
-            </button>
-          </div>
-        );
-      })}
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 12, padding: "12px 14px", gap: 10 }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>{label}</div>
+        <div className="mono" style={{ fontSize: 12.5, fontWeight: 600, color: sign < 0 ? "var(--red)" : "var(--green)", marginTop: 2 }}>
+          {sign > 0 ? "+" : "-"}{item.val} {unit}
+        </div>
+      </div>
+      <button
+        className="btn-primary" style={{ width: "auto", flex: "0 0 auto", padding: "8px 14px", fontSize: 13 }}
+        disabled={busyId === item.id}
+        onClick={() => onAct(item)}
+      >
+        {busyId === item.id ? "…" : isParent ? t("save") : t("declare")}
+      </button>
     </div>
   );
 }
 
-function RewardList({ items, currencyUnit, onAct, busyId, isParent }) {
+function MissionList({ items, currencyUnit, onAct, busyId, isParent, lang, t }) {
   if (items.length === 0) {
-    return <p style={{ color: "var(--text-faint)", textAlign: "center", padding: 20, fontSize: 14 }}>Aucune récompense activée ici — demande à Maman d'en cocher dans Réglages.</p>;
+    return <p style={{ color: "var(--text-faint)", textAlign: "center", padding: 20, fontSize: 14 }}>{t("noMissions")}</p>;
   }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {items.map((item) => {
-        const unit = unitFor(item, currencyUnit);
-        return (
-          <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 12, padding: "12px 14px", gap: 10 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>{item.fr}</div>
-              {item.he && <div dir="rtl" style={{ fontSize: 12, color: "var(--text-faint)" }}>{item.he}</div>}
-              <div className="mono" style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-muted)", marginTop: 2 }}>
-                dès {item.val} {unit}
-              </div>
-            </div>
-            <button
-              className="btn-primary" style={{ width: "auto", flex: "0 0 auto", padding: "8px 14px", fontSize: 13 }}
-              disabled={busyId === item.id}
-              onClick={() => onAct(item)}
-            >
-              {busyId === item.id ? "…" : isParent ? "✅ Accorder" : "Demander"}
-            </button>
-          </div>
-        );
-      })}
+      {items.map((item) => (
+        <MissionRow key={item.id} item={item} currencyUnit={currencyUnit} onAct={onAct} busyId={busyId} isParent={isParent} lang={lang} t={t} />
+      ))}
     </div>
   );
 }
 
-function RequestList({ list, isParent, onApproveEntry, onRejectEntry, onApproveClaim, onRejectClaim }) {
+function RewardRow({ item, currencyUnit, onAct, busyId, isParent, lang, t }) {
+  const label = useItemLabel(item, lang);
+  const unit = unitFor(item, currencyUnit);
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 12, padding: "12px 14px", gap: 10 }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>{label}</div>
+        <div className="mono" style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text-muted)", marginTop: 2 }}>
+          {t("from")} {item.val} {unit}
+        </div>
+      </div>
+      <button
+        className="btn-primary" style={{ width: "auto", flex: "0 0 auto", padding: "8px 14px", fontSize: 13 }}
+        disabled={busyId === item.id}
+        onClick={() => onAct(item)}
+      >
+        {busyId === item.id ? "…" : isParent ? t("grant") : t("ask")}
+      </button>
+    </div>
+  );
+}
+
+function RewardList({ items, currencyUnit, onAct, busyId, isParent, lang, t }) {
+  if (items.length === 0) {
+    return <p style={{ color: "var(--text-faint)", textAlign: "center", padding: 20, fontSize: 14 }}>{t("noRewards")}</p>;
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {items.map((item) => (
+        <RewardRow key={item.id} item={item} currencyUnit={currencyUnit} onAct={onAct} busyId={busyId} isParent={isParent} lang={lang} t={t} />
+      ))}
+    </div>
+  );
+}
+
+function RequestRow({ req, isParent, lang, t, onApproveEntry, onRejectEntry, onApproveClaim, onRejectClaim }) {
+  const label = useItemLabel(req, lang);
+  const isPending = req.status === "pending";
+  const isPositive = req.kind === "claim" ? true : req.amt >= 0;
+  return (
+    <div style={{ background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 12, padding: "12px 14px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>{label}</div>
+          <div style={{ fontSize: 11.5, color: "var(--text-faint)", marginTop: 2 }}>{formatDate(req.createdAt, lang)}</div>
+        </div>
+        <span
+          className="mono"
+          style={{ fontSize: 13.5, fontWeight: 700, color: isPositive ? "var(--green)" : "var(--red)", flex: "0 0 auto" }}
+        >
+          {req.kind === "claim" ? `≥ ${req.threshold}` : `${req.amt > 0 ? "+" : ""}${req.amt}`} {req.unit || ""}
+        </span>
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: isPending ? "var(--text-muted)" : "var(--green)" }}>
+          {isPending ? t("pending") : t("confirmed")}
+        </span>
+        {isParent && isPending && (
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => (req.kind === "entry" ? onApproveEntry(req.id) : onApproveClaim(req.id))}
+              style={{ background: "var(--green)", color: "#fff", border: "none", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+            >
+              {t("validate")}
+            </button>
+            <button
+              onClick={() => (req.kind === "entry" ? onRejectEntry(req.id) : onRejectClaim(req.id))}
+              style={{ background: "none", color: "var(--red)", border: "1px solid var(--red)", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+            >
+              {t("reject")}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RequestList({ list, isParent, lang, t, onApproveEntry, onRejectEntry, onApproveClaim, onRejectClaim }) {
   if (list.length === 0) {
-    return <p style={{ color: "var(--text-faint)", textAlign: "center", padding: 20, fontSize: 14 }}>Rien pour l'instant.</p>;
+    return <p style={{ color: "var(--text-faint)", textAlign: "center", padding: 20, fontSize: 14 }}>{t("noRequests")}</p>;
   }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {list.map((req) => {
-        const isPending = req.status === "pending";
-        const isPositive = req.kind === "claim" ? true : req.amt >= 0;
-        return (
-          <div key={req.id} style={{ background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 12, padding: "12px 14px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{req.fr}</div>
-                <div style={{ fontSize: 11.5, color: "var(--text-faint)", marginTop: 2 }}>{formatDate(req.createdAt)}</div>
-              </div>
-              <span
-                className="mono"
-                style={{ fontSize: 13.5, fontWeight: 700, color: isPositive ? "var(--green)" : "var(--red)", flex: "0 0 auto" }}
-              >
-                {req.kind === "claim" ? `≥ ${req.threshold}` : `${req.amt > 0 ? "+" : ""}${req.amt}`} {req.unit || ""}
-              </span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: isPending ? "var(--text-muted)" : "var(--green)" }}>
-                {isPending ? "⏳ En attente" : "✅ Confirmé"}
-              </span>
-              {isParent && isPending && (
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    onClick={() => (req.kind === "entry" ? onApproveEntry(req.id) : onApproveClaim(req.id))}
-                    style={{ background: "var(--green)", color: "#fff", border: "none", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
-                  >
-                    ✓ Valider
-                  </button>
-                  <button
-                    onClick={() => (req.kind === "entry" ? onRejectEntry(req.id) : onRejectClaim(req.id))}
-                    style={{ background: "none", color: "var(--red)", border: "1px solid var(--red)", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
-                  >
-                    ✕ Refuser
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })}
+      {list.map((req) => (
+        <RequestRow
+          key={req.id} req={req} isParent={isParent} lang={lang} t={t}
+          onApproveEntry={onApproveEntry} onRejectEntry={onRejectEntry}
+          onApproveClaim={onApproveClaim} onRejectClaim={onRejectClaim}
+        />
+      ))}
     </div>
   );
 }
