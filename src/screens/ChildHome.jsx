@@ -6,7 +6,7 @@ import {
 import { logout } from "../services/auth.js";
 import { getItemLabel } from "../services/translate.js";
 import { BUILTIN_CATALOG } from "../data/missionCatalog.js";
-import { useLang, LanguageSwitcher } from "../i18n.js";
+import { useLang, LanguageSwitcher } from "../i18n.jsx";
 
 const MISSION_CATS = ["bonus", "malus", "weekly"];
 const JOKER_CATS = ["jokerEarn", "jokerUse"];
