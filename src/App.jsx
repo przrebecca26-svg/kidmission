@@ -6,11 +6,13 @@ import LoginParent from "./screens/LoginParent.jsx";
 import ChildLogin from "./screens/ChildLogin.jsx";
 import FamilyHome from "./screens/FamilyHome.jsx";
 import ChildHome from "./screens/ChildHome.jsx";
+import ChildSettings from "./screens/ChildSettings.jsx";
 
 export default function App() {
   const auth = useAuth();
   const [screen, setScreen] = useState("welcome"); // welcome | signup | login | childLogin
   const [openChildId, setOpenChildId] = useState(null);
+  const [settingsChildId, setSettingsChildId] = useState(null);
 
   if (auth === undefined) {
     return (
@@ -29,10 +31,13 @@ export default function App() {
 
   // Signed in.
   if (auth.role === "parent") {
+    if (settingsChildId) {
+      return <ChildSettings familyId={auth.familyId} childId={settingsChildId} onBack={() => setSettingsChildId(null)} />;
+    }
     if (openChildId) {
       return <ChildHome familyId={auth.familyId} childId={openChildId} />; // Maman previewing a child's carnet — same view for now
     }
-    return <FamilyHome familyId={auth.familyId} onOpenChild={setOpenChildId} />;
+    return <FamilyHome familyId={auth.familyId} onOpenChild={setOpenChildId} onOpenSettings={setSettingsChildId} />;
   }
 
   return <ChildHome familyId={auth.familyId} childId={auth.childId} />;
