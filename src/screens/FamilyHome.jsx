@@ -9,7 +9,7 @@ const CURRENCY_OPTIONS = [
   { type: "points", unit: "pts", label: "⭐ Points" },
 ];
 
-export default function FamilyHome({ familyId, onOpenChild, onOpenSettings, onOpenPayments }) {
+export default function FamilyHome({ familyId, onOpenChild, onOpenSettings, onOpenPayments, onOpenAccess }) {
   const [children, setChildren] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
 
@@ -37,7 +37,7 @@ export default function FamilyHome({ familyId, onOpenChild, onOpenSettings, onOp
           {(children || []).map((c) => (
             <div
               key={c.id}
-              style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 14, padding: "14px 16px" }}
+              style={{ display: "flex", alignItems: "center", gap: 4, width: "100%", background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 14, padding: "14px 16px" }}
             >
               <button
                 onClick={() => onOpenChild(c.id)}
@@ -47,6 +47,13 @@ export default function FamilyHome({ familyId, onOpenChild, onOpenSettings, onOp
                 <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
                   {CURRENCY_OPTIONS.find((o) => o.type === c.currencyType)?.label}
                 </span>
+              </button>
+              <button
+                onClick={() => onOpenAccess(c.id)}
+                title="Accès"
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, padding: "0 0 0 6px", flex: "0 0 auto" }}
+              >
+                🔑
               </button>
               <button
                 onClick={() => onOpenPayments(c.id)}
