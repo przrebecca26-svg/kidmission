@@ -17,6 +17,9 @@ export default function LoginParent({ onBack, onLoggedIn, onGoSignup }) {
       await loginParent({ email: email.trim(), password });
       onLoggedIn();
     } catch (err) {
+      // Temporary debug log — remove once the mobile login issue is diagnosed.
+      // eslint-disable-next-line no-console
+      console.error("LOGIN ERROR:", err.code, err.message, err);
       setError(translateFirebaseError(err));
     } finally {
       setLoading(false);
