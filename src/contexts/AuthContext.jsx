@@ -16,6 +16,12 @@ export function AuthProvider({ children }) {
         return;
       }
       try {
+        // Same defensive token refresh as loginParent()/loginChild() in auth.js —
+        // onAuthStateChanged can fire (e.g. on page load, or right after a fresh
+        // sign-in) a moment before the token is fully attached to outgoing Firestore
+        // requests on some mobile WebKit browsers, which otherwise surfaces as a
+        // spurious permission-denied here.
+        await user.getIdToken(true);
         const familyId = await findFamilyIdForUid(user.uid);
         if (!familyId) {
           // Signed in with Firebase but no family membership doc — shouldn't normally
