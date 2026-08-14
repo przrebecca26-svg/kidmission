@@ -30,6 +30,18 @@ export function watchAllChildren(familyId, callback) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Members for a given child — current + past login credentials.      */
+/* Used by the "reset code" screen to show device/access history.     */
+/* ------------------------------------------------------------------ */
+
+export function watchMembersForChild(familyId, childId, callback) {
+  const q = query(collection(db, `families/${familyId}/members`), where("childId", "==", childId));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  });
+}
+
+/* ------------------------------------------------------------------ */
 /* Settings (missions/rewards/PIN) — one doc per child, like before   */
 /* ------------------------------------------------------------------ */
 
