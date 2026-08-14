@@ -88,6 +88,27 @@ const STRINGS = {
   whoConnects: { fr: "Qui se connecte ?", he: "מי מתחבר/ת?", en: "Who's logging in?", ru: "Кто входит?" },
   momLabel: { fr: "Maman", he: "אמא", en: "Mom", ru: "Мама" },
   childLabel: { fr: "Enfant", he: "ילד/ה", en: "Child", ru: "Ребёнок" },
+  createYourAccount: { fr: "Créer ton compte", he: "צור/י את החשבון שלך", en: "Create your account", ru: "Создать аккаунт" },
+  yourSpaceSubtitle: { fr: "Ton espace Maman, à toi seule.", he: "החלל שלך כהורה, רק עבורך.", en: "Your parent space, just for you.", ru: "Твоё родительское пространство." },
+  yourFirstName: { fr: "Ton prénom", he: "השם הפרטי שלך", en: "Your first name", ru: "Твоё имя" },
+  familyNameLabel: { fr: "Nom de famille (pour identifier votre espace)", he: "שם המשפחה (לזיהוי החלל שלכם)", en: "Family name (to identify your space)", ru: "Фамилия (для идентификации семьи)" },
+  emailLabel: { fr: "Email", he: "אימייל", en: "Email", ru: "Эл. почта" },
+  passwordLabel: { fr: "Mot de passe (6 caractères minimum)", he: "סיסמה (6 תווים לפחות)", en: "Password (6 characters minimum)", ru: "Пароль (минимум 6 символов)" },
+  creating: { fr: "Création…", he: "יוצר…", en: "Creating…", ru: "Создание…" },
+  createMyAccount: { fr: "Créer mon compte", he: "צור/י את החשבון שלי", en: "Create my account", ru: "Создать аккаунт" },
+  fillAllFields: {
+    fr: "Remplis tous les champs (le mot de passe doit faire au moins 6 caractères).",
+    he: "יש למלא את כל השדות (הסיסמה חייבת להכיל לפחות 6 תווים).",
+    en: "Fill in all fields (password must be at least 6 characters).",
+    ru: "Заполните все поля (пароль минимум 6 символов).",
+  },
+  errEmailInUse: { fr: "Cet email est déjà utilisé.", he: "האימייל הזה כבר בשימוש.", en: "This email is already in use.", ru: "Этот email уже используется." },
+  errInvalidEmail: { fr: "Adresse email invalide.", he: "כתובת אימייל לא תקינה.", en: "Invalid email address.", ru: "Неверный адрес почты." },
+  errWeakPassword: { fr: "Mot de passe trop faible (6 caractères minimum).", he: "הסיסמה חלשה מדי (6 תווים לפחות).", en: "Password too weak (6 characters minimum).", ru: "Пароль слишком простой (минимум 6 символов)." },
+  errWrongPassword: { fr: "Email ou mot de passe incorrect.", he: "אימייל או סיסמה שגויים.", en: "Incorrect email or password.", ru: "Неверный email или пароль." },
+  errUserNotFound: { fr: "Aucun compte avec cet email.", he: "לא נמצא חשבון עם אימייל זה.", en: "No account with this email.", ru: "Нет аккаунта с такой почтой." },
+  errNetwork: { fr: "Problème de connexion internet.", he: "בעיית חיבור לאינטרנט.", en: "Internet connection problem.", ru: "Проблема с интернет-соединением." },
+  errGeneric: { fr: "Une erreur est survenue. Réessaie.", he: "משהו השתבש. נסה/י שוב.", en: "Something went wrong. Try again.", ru: "Что-то пошло не так. Попробуй снова." },
 };
 
 export function useLang() {
