@@ -109,6 +109,25 @@ const STRINGS = {
   errUserNotFound: { fr: "Aucun compte avec cet email.", he: "לא נמצא חשבון עם אימייל זה.", en: "No account with this email.", ru: "Нет аккаунта с такой почтой." },
   errNetwork: { fr: "Problème de connexion internet.", he: "בעיית חיבור לאינטרנט.", en: "Internet connection problem.", ru: "Проблема с интернет-соединением." },
   errGeneric: { fr: "Une erreur est survenue. Réessaie.", he: "משהו השתבש. נסה/י שוב.", en: "Something went wrong. Try again.", ru: "Что-то пошло не так. Попробуй снова." },
+  welcomeBack: { fr: "Bon retour 👩", he: "ברוך/ה שובך 👩", en: "Welcome back 👩", ru: "С возвращением 👩" },
+  enterEmailFirst: { fr: "Entre ton email d'abord.", he: "יש להזין קודם את האימייל.", en: "Enter your email first.", ru: "Сначала введите email." },
+  resetEmailSent: { fr: "Email envoyé — vérifie ta boîte mail.", he: "האימייל נשלח — בדוק/בדקי את תיבת הדואר שלך.", en: "Email sent — check your inbox.", ru: "Письмо отправлено — проверьте почту." },
+  passwordFieldLabel: { fr: "Mot de passe", he: "סיסמה", en: "Password", ru: "Пароль" },
+  connecting: { fr: "Connexion…", he: "מתחבר…", en: "Connecting…", ru: "Вход…" },
+  signIn: { fr: "Se connecter", he: "התחבר/י", en: "Sign in", ru: "Войти" },
+  forgotPassword: { fr: "Mot de passe oublié ?", he: "שכחת סיסמה?", en: "Forgot password?", ru: "Забыли пароль?" },
+  createAccountLink: { fr: "Créer un compte", he: "צור/י חשבון", en: "Create an account", ru: "Создать аккаунт" },
+  isThisYou: { fr: "🧒 C'est toi ?", he: "🧒 זה/זאת את/ה?", en: "🧒 Is this you?", ru: "🧒 Это ты?" },
+  familyCodeLabel: { fr: "Code famille (donné par Maman)", he: "קוד משפחה (ניתן על ידי אמא)", en: "Family code (given by a parent)", ru: "Код семьи (дала мама)" },
+  yourUsername: { fr: "Ton identifiant", he: "שם המשתמש שלך", en: "Your username", ru: "Твой логин" },
+  yourCode: { fr: "Ton code (6 chiffres)", he: "הקוד שלך (6 ספרות)", en: "Your code (6 digits)", ru: "Твой код (6 цифр)" },
+  letsGo: { fr: "C'est parti !", he: "יאללה, בואי!", en: "Let's go!", ru: "Поехали!" },
+  checkAllFilled: {
+    fr: "Vérifie que tout est bien rempli (le code fait 6 chiffres).",
+    he: "בדוק/י שהכל מלא כמו שצריך (הקוד הוא בן 6 ספרות).",
+    en: "Check that everything is filled in (the code is 6 digits).",
+    ru: "Проверь, всё ли заполнено (код из 6 цифр).",
+  },
 };
 
 export function useLang() {
