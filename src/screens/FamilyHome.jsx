@@ -9,7 +9,7 @@ const CURRENCY_OPTIONS = [
   { type: "points", unit: "pts", label: "⭐ Points" },
 ];
 
-export default function FamilyHome({ familyId, onOpenChild }) {
+export default function FamilyHome({ familyId, onOpenChild, onOpenSettings }) {
   const [children, setChildren] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
 
@@ -35,15 +35,27 @@ export default function FamilyHome({ familyId, onOpenChild }) {
         )}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {(children || []).map((c) => (
-            <button
-              key={c.id} onClick={() => onOpenChild(c.id)}
-              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", textAlign: "left", background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 14, padding: "14px 16px", cursor: "pointer" }}
+            <div
+              key={c.id}
+              style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 14, padding: "14px 16px" }}
             >
-              <span style={{ fontSize: 15, fontWeight: 600 }}>🧒 {c.displayName}</span>
-              <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
-                {CURRENCY_OPTIONS.find((o) => o.type === c.currencyType)?.label}
-              </span>
-            </button>
+              <button
+                onClick={() => onOpenChild(c.id)}
+                style={{ flex: 1, display: "flex", justifyContent: "space-between", alignItems: "center", textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer" }}
+              >
+                <span style={{ fontSize: 15, fontWeight: 600 }}>🧒 {c.displayName}</span>
+                <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                  {CURRENCY_OPTIONS.find((o) => o.type === c.currencyType)?.label}
+                </span>
+              </button>
+              <button
+                onClick={() => onOpenSettings(c.id)}
+                title="Réglages"
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, padding: "0 0 0 4px", flex: "0 0 auto" }}
+              >
+                ⚙️
+              </button>
+            </div>
           ))}
         </div>
 
