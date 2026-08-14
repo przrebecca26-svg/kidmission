@@ -15,7 +15,7 @@ export const BONUS_CATALOG = [
   { id: "b5", fr: "Vider le lave-vaisselle", he: "לרוקן את המדיח", val: 15 },
   { id: "b6", fr: "Ranger ses vêtements", he: "לסדר את הבגדים שלה", val: 15 },
   { id: "b7", fr: "Préparer son cartable seule", he: "להכין לבד את תיק בית הספר", val: 10 },
-  { id: "b8", fr: "Jouer et s'occuper de Stitch quand maman le demande", he: "לשחק ולטפל בסטיץ' כשאמא מבקשת", val: 10 },
+  { id: "b8", fr: "Jouer et s'occuper de son animal de compagnie quand maman le demande", he: "לשחק ולטפל בחיית המחמד כשאמא מבקשת", val: 10 },
   { id: "b9", fr: "Aider à cuisiner", he: "לעזור בבישול", val: 10 },
   { id: "b10", fr: "Ranger les courses", he: "לסדר את הקניות", val: 10 },
   { id: "b11", fr: "Trier une machine de linge", he: "למיין כביסה", val: 10 },
@@ -41,7 +41,7 @@ export const BONUS_CATALOG = [
   { id: "b31", fr: "Aider une personne âgée", he: "לעזור לאדם מבוגר", val: 20 },
   { id: "b32", fr: "Défendre gentiment un camarade", he: "להגן על חבר בצורה יפה", val: 30 },
   { id: "b33", fr: "Consoler quelqu'un", he: "לנחם מישהו", val: 20 },
-  { id: "b34", fr: "Aider Stitch spontanément", he: "לעזור לסטיץ' מיוזמתה", val: 20 },
+  { id: "b34", fr: "Aider son animal de compagnie spontanément", he: "לעזור לחיית המחמד מיוזמתה", val: 20 },
   { id: "b35", fr: "Faire un câlin à maman quand elle est fatiguée", he: "לחבק את אמא כשהיא עייפה", val: 10 },
 ];
 
@@ -103,7 +103,7 @@ export const JOKER_USE_CATALOG = [
   { id: "ju4", fr: "Choisir le repas du soir", he: "לבחור את ארוחת הערב", val: 2 },
   { id: "ju5", fr: "Inviter une cousine", he: "להזמין בת דודה", val: 2 },
   { id: "ju6", fr: "Soirée spéciale maman-fille", he: "ערב מיוחד עם אמא", val: 3 },
-  { id: "ju7", fr: "Sortie spéciale avec Stitch", he: "יציאה מיוחדת עם סטיץ'", val: 3 },
+  { id: "ju7", fr: "Sortie spéciale avec son animal de compagnie", he: "יציאה מיוחדת עם חיית המחמד", val: 3 },
   { id: "ju8", fr: "Petit cadeau surprise", he: "מתנת הפתעה קטנה", val: 5 },
 ];
 
@@ -128,6 +128,13 @@ export const PAYMENT_RULE = {
   fr: "L'argent sera versé sur son compte avec sa carte bancaire le 5 de chaque mois. Chaque mois, les bonus et malus sont comptabilisés jusqu'au 4. Les calculs sont effectués le 4, puis l'argent est versé le 5.",
   he: "הכסף יופקד לחשבון הבנק שלה ב-5 בכל חודש. בכל חודש הבונוסים והקנסות מחושבים עד ה-4 לחודש. החישוב מתבצע ב-4 והכסף מופקד ב-5.",
 };
+
+export const UNIT_OPTIONS = [
+  { key: "money", symbol: "₪", label: "💰 Shekels" },
+  { key: "points", symbol: "⭐", label: "⭐ Points" },
+  { key: "joker", symbol: "🃏", label: "🃏 Jokers" },
+  { key: "screentime", symbol: "min", label: "📱 Minutes d'écran" },
+];
 
 export const BUILTIN_CATALOG = {
   bonus: BONUS_CATALOG,
