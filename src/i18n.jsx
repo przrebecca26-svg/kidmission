@@ -85,6 +85,9 @@ const STRINGS = {
   currencyMoney: { fr: "💰 Argent", he: "💰 כסף", en: "💰 Money", ru: "💰 Деньги" },
   currencyScreentime: { fr: "📱 Temps d'écran", he: "📱 זמן מסך", en: "📱 Screen time", ru: "📱 Экранное время" },
   currencyPoints: { fr: "⭐ Points", he: "⭐ נקודות", en: "⭐ Points", ru: "⭐ Баллы" },
+  whoConnects: { fr: "Qui se connecte ?", he: "מי מתחבר/ת?", en: "Who's logging in?", ru: "Кто входит?" },
+  momLabel: { fr: "Maman", he: "אמא", en: "Mom", ru: "Мама" },
+  childLabel: { fr: "Enfant", he: "ילד/ה", en: "Child", ru: "Ребёнок" },
 };
 
 export function useLang() {
