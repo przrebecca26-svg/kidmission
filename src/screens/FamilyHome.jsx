@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { watchAllChildren, createChildProfile } from "../services/firestore.js";
 import { createChildLogin, logout } from "../services/auth.js";
 import { translateFirebaseError } from "./SignupParent.jsx";
-import { useLang, LanguageSwitcher } from "../i18n.js";
+import { useLang, LanguageSwitcher } from "../i18n.jsx";
 
 export default function FamilyHome({ familyId, onOpenChild, onOpenSettings, onOpenPayments, onOpenAccess }) {
   const { lang, setLang, t, dir } = useLang();
