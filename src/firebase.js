@@ -1,6 +1,6 @@
 import { initializeApp, getApps, deleteApp } from "firebase/app";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
-import { getFirestore, connectFirestoreEmulator, enableIndexedDbPersistence } from "firebase/firestore";
+import { initializeFirestore, connectFirestoreEmulator, enableIndexedDbPersistence } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -15,7 +15,19 @@ const firebaseConfig = {
 // (Maman or a child), and the one every screen in the app reads from.
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// Firestore's default transport (a WebChannel/streaming connection) can hang or
+// silently fail on some mobile networks (flaky cellular, certain Wi-Fi proxies,
+// carrier-level filtering) — this showed up as an 18+ second stalled request in
+// testing on iPhone cellular, which made the post-login family lookup time out
+// with a generic error even though sign-in itself succeeded. experimentalAutoDetectLongPolling
+// makes Firestore detect this and automatically fall back to plain HTTP long-polling,
+// which works reliably in those environments. Must use initializeFirestore (not
+// getFirestore) to pass these settings, and it must be called before any other
+// Firestore function touches this app instance.
+export const db = initializeFirestore(app, {
+  experimentalAutoDetectLongPolling: true,
+});
 
 // Offline persistence: lets the app keep working (read + queue writes) without a
 // connection, then resync automatically once back online. Wrapped in a try/catch
