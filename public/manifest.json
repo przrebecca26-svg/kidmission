@@ -1,6 +1,6 @@
 {
-  "name": "Shyrel — KidMission",
-  "short_name": "Shyrel",
+  "name": "KidMission",
+  "short_name": "KidMission",
   "description": "Carnet de missions, bonus et récompenses en famille.",
   "start_url": "/",
   "scope": "/",
