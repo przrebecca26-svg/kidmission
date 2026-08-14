@@ -2,35 +2,40 @@ import { useEffect, useState } from "react";
 import { watchAllChildren, createChildProfile } from "../services/firestore.js";
 import { createChildLogin, logout } from "../services/auth.js";
 import { translateFirebaseError } from "./SignupParent.jsx";
-
-const CURRENCY_OPTIONS = [
-  { type: "money", unit: "₪", label: "💰 Argent" },
-  { type: "screentime", unit: "min", label: "📱 Temps d'écran" },
-  { type: "points", unit: "pts", label: "⭐ Points" },
-];
+import { useLang, LanguageSwitcher } from "../i18n.js";
 
 export default function FamilyHome({ familyId, onOpenChild, onOpenSettings, onOpenPayments, onOpenAccess }) {
+  const { lang, setLang, t, dir } = useLang();
   const [children, setChildren] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
+
+  const CURRENCY_OPTIONS = [
+    { type: "money", unit: "₪", label: t("currencyMoney") },
+    { type: "screentime", unit: "min", label: t("currencyScreentime") },
+    { type: "points", unit: "pts", label: t("currencyPoints") },
+  ];
 
   useEffect(() => watchAllChildren(familyId, setChildren), [familyId]);
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--pink-bg)", paddingBottom: 40 }}>
+    <div dir={dir} style={{ minHeight: "100vh", background: "var(--pink-bg)", paddingBottom: 40 }}>
       <div style={{ background: "var(--pink-header)", color: "#fff", padding: "calc(20px + env(safe-area-inset-top)) 20px 22px", borderBottomLeftRadius: 20, borderBottomRightRadius: 20 }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+          <LanguageSwitcher lang={lang} setLang={setLang} />
+        </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h1 className="disp" style={{ fontSize: 24, margin: 0 }}>Mes enfants</h1>
+          <h1 className="disp" style={{ fontSize: 24, margin: 0 }}>{t("myChildren")}</h1>
           <button onClick={logout} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: 999, padding: "8px 14px", fontSize: 12.5, cursor: "pointer" }}>
-            Déconnexion
+            {t("logout")}
           </button>
         </div>
       </div>
 
       <div style={{ padding: "18px 16px" }}>
-        {children === null && <p style={{ color: "var(--text-faint)" }}>Chargement…</p>}
+        {children === null && <p style={{ color: "var(--text-faint)" }}>{t("loading")}</p>}
         {children !== null && children.length === 0 && (
           <p style={{ color: "var(--text-faint)", textAlign: "center", padding: 20 }}>
-            Aucun profil enfant pour l'instant — ajoute le premier ci-dessous.
+            {t("noChildren")}
           </p>
         )}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -74,21 +79,21 @@ export default function FamilyHome({ familyId, onOpenChild, onOpenSettings, onOp
         </div>
 
         <button className="btn-primary" style={{ marginTop: 18 }} onClick={() => setShowAdd(true)}>
-          + Ajouter un enfant
+          {t("addChild")}
         </button>
       </div>
 
       {showAdd && (
-        <AddChildModal familyId={familyId} onClose={() => setShowAdd(false)} />
+        <AddChildModal familyId={familyId} onClose={() => setShowAdd(false)} t={t} currencyOptions={CURRENCY_OPTIONS} />
       )}
     </div>
   );
 }
 
-function AddChildModal({ familyId, onClose }) {
+function AddChildModal({ familyId, onClose, t, currencyOptions }) {
   const [step, setStep] = useState("profile"); // "profile" | "login" | "done"
   const [displayName, setDisplayName] = useState("");
-  const [currency, setCurrency] = useState(CURRENCY_OPTIONS[0]);
+  const [currency, setCurrency] = useState(currencyOptions[0]);
   const [username, setUsername] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState(null);
@@ -97,7 +102,7 @@ function AddChildModal({ familyId, onClose }) {
 
   async function handleCreateProfile(e) {
     e.preventDefault();
-    if (!displayName.trim()) { setError("Donne un prénom."); return; }
+    if (!displayName.trim()) { setError(t("giveFirstName")); return; }
     setError(null);
     setLoading(true);
     try {
@@ -117,7 +122,7 @@ function AddChildModal({ familyId, onClose }) {
 
   async function handleCreateLogin(e) {
     e.preventDefault();
-    if (!username.trim() || code.length !== 6) { setError("Identifiant + code à 6 chiffres requis."); return; }
+    if (!username.trim() || code.length !== 6) { setError(t("usernameCodeRequired")); return; }
     setError(null);
     setLoading(true);
     try {
@@ -137,15 +142,15 @@ function AddChildModal({ familyId, onClose }) {
 
         {step === "profile" && (
           <form onSubmit={handleCreateProfile}>
-            <h3 className="disp" style={{ margin: "0 0 14px" }}>Nouveau profil enfant</h3>
+            <h3 className="disp" style={{ margin: "0 0 14px" }}>{t("newChildProfile")}</h3>
             <div className="field">
-              <label>Prénom</label>
+              <label>{t("firstName")}</label>
               <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Shyrel" />
             </div>
             <div className="field">
-              <label>Type de récompense pour cet enfant</label>
+              <label>{t("rewardType")}</label>
               <div style={{ display: "flex", gap: 8 }}>
-                {CURRENCY_OPTIONS.map((opt) => (
+                {currencyOptions.map((opt) => (
                   <button
                     type="button" key={opt.type} onClick={() => setCurrency(opt)}
                     style={{
@@ -159,36 +164,36 @@ function AddChildModal({ familyId, onClose }) {
                 ))}
               </div>
             </div>
-            <button className="btn-primary" type="submit" disabled={loading}>{loading ? "…" : "Continuer"}</button>
+            <button className="btn-primary" type="submit" disabled={loading}>{loading ? "…" : t("continueLabel")}</button>
           </form>
         )}
 
         {step === "login" && (
           <form onSubmit={handleCreateLogin}>
-            <h3 className="disp" style={{ margin: "0 0 14px" }}>Connexion de {displayName}</h3>
+            <h3 className="disp" style={{ margin: "0 0 14px" }}>{t("loginFor", { name: displayName })}</h3>
             <div className="field">
-              <label>Identifiant (que {displayName} tapera pour se connecter)</label>
+              <label>{t("usernameLabel", { name: displayName })}</label>
               <input value={username} onChange={(e) => setUsername(e.target.value)} autoCapitalize="none" />
             </div>
             <div className="field">
-              <label>Code à 6 chiffres</label>
+              <label>{t("codeLabel")}</label>
               <input
                 inputMode="numeric" value={code}
                 onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
                 style={{ letterSpacing: 6, textAlign: "center", fontSize: 20, fontFamily: "var(--font-mono)" }}
               />
             </div>
-            <button className="btn-primary" type="submit" disabled={loading}>{loading ? "…" : "Créer l'accès"}</button>
+            <button className="btn-primary" type="submit" disabled={loading}>{loading ? "…" : t("createAccess")}</button>
           </form>
         )}
 
         {step === "done" && (
           <div style={{ textAlign: "center" }}>
-            <h3 className="disp" style={{ margin: "0 0 10px" }}>✅ {displayName} est prêt·e !</h3>
+            <h3 className="disp" style={{ margin: "0 0 10px" }}>✅ {t("childReady", { name: displayName })}</h3>
             <p style={{ fontSize: 13.5, color: "var(--text-muted)", marginBottom: 18 }}>
-              Sur son téléphone : code famille <strong>{familyId}</strong>, identifiant <strong>{username}</strong>, code <strong>{code}</strong>.
+              {t("childReadyDetail", { familyId, username, code })}
             </p>
-            <button className="btn-primary" onClick={onClose}>Terminé</button>
+            <button className="btn-primary" onClick={onClose}>{t("done")}</button>
           </div>
         )}
       </div>
