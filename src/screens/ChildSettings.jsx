@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { watchChildProfile, watchSettings, saveSettings } from "../services/firestore.js";
-import { BUILTIN_CATALOG, HOUSE_RULES, PAYMENT_RULE } from "../data/missionCatalog.js";
+import { BUILTIN_CATALOG, HOUSE_RULES, PAYMENT_RULE, UNIT_OPTIONS } from "../data/missionCatalog.js";
 import { translateFrToHe, translateHeToFr } from "../services/translate.js";
 
 const TABS = [
@@ -13,17 +13,11 @@ const TABS = [
   { key: "rules", label: "📜 Règles", readOnly: true },
 ];
 
-/**
- * Parent-only screen: the family's mission catalog (bonus/malus/weekly/jokers/rewards),
- * preloaded with Rebecca's original list. Builtin items are toggled on/off with a
- * checkbox (unchecked by default) rather than retyped; parents can also add fully
- * custom items, which get auto-translated FR<->HE via a free translation API.
- */
 export default function ChildSettings({ familyId, childId, onBack }) {
   const [profile, setProfile] = useState(undefined);
   const [settings, setSettings] = useState(undefined);
   const [activeTab, setActiveTab] = useState("bonus");
-  const [editingItem, setEditingItem] = useState(null); // null | "new" | custom item object
+  const [editingItem, setEditingItem] = useState(null);
 
   useEffect(() => watchChildProfile(familyId, childId, setProfile), [familyId, childId]);
   useEffect(() => {
@@ -35,7 +29,7 @@ export default function ChildSettings({ familyId, childId, onBack }) {
   const enabledIds = settings?.enabledIds || {};
   const customItems = settings?.customItems || [];
   const tab = TABS.find((t) => t.key === activeTab);
-  const unit = tab?.unit || profile?.currencyUnit || "";
+  const defaultUnit = tab?.unit || profile?.currencyUnit || "";
 
   async function persist(nextEnabledIds, nextCustomItems) {
     await saveSettings(familyId, childId, {
@@ -82,7 +76,7 @@ export default function ChildSettings({ familyId, childId, onBack }) {
           Réglages — {profile?.displayName}
         </h1>
         <p style={{ fontSize: 12.5, opacity: 0.85, margin: "4px 0 0" }}>
-          Missions payées en {profile?.currencyUnit}
+          Devise par défaut : {profile?.currencyUnit} (modifiable par item)
         </p>
       </div>
 
@@ -117,7 +111,7 @@ export default function ChildSettings({ familyId, childId, onBack }) {
                 checked={!!enabledIds[item.id]}
                 onToggle={() => toggleBuiltin(item.id)}
                 sign={tab.sign}
-                unit={unit}
+                unit={defaultUnit}
               />
             ))}
             {customForTab.map((item) => (
@@ -125,7 +119,7 @@ export default function ChildSettings({ familyId, childId, onBack }) {
                 key={item.id}
                 item={item}
                 sign={tab.sign}
-                unit={unit}
+                fallbackUnit={defaultUnit}
                 onEdit={() => setEditingItem(item)}
                 onDelete={() => handleDeleteCustomItem(item.id)}
               />
@@ -143,7 +137,7 @@ export default function ChildSettings({ familyId, childId, onBack }) {
           item={editingItem === "new" ? null : editingItem}
           cat={activeTab}
           valueLabel={tab.valueLabel}
-          unit={unit}
+          defaultUnit={defaultUnit}
           onSave={handleSaveCustomItem}
           onClose={() => setEditingItem(null)}
         />
@@ -171,7 +165,8 @@ function BuiltinRow({ item, checked, onToggle, sign, unit }) {
   );
 }
 
-function CustomRow({ item, sign, unit, onEdit, onDelete }) {
+function CustomRow({ item, sign, fallbackUnit, onEdit, onDelete }) {
+  const unit = item.unit || fallbackUnit;
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--pink-card)", border: "1px dashed var(--pink-header)", borderRadius: 12, padding: "12px 14px" }}>
       <div>
@@ -209,13 +204,14 @@ function RulesPanel() {
   );
 }
 
-function ItemModal({ item, cat, valueLabel, unit, onSave, onClose }) {
+function ItemModal({ item, cat, valueLabel, defaultUnit, onSave, onClose }) {
   const [fr, setFr] = useState(item?.fr || "");
   const [he, setHe] = useState(item?.he || "");
   const [val, setVal] = useState(item ? item.val.toString() : "");
+  const [unit, setUnit] = useState(item?.unit || defaultUnit);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [translating, setTranslating] = useState(null); // "fr" | "he" | null
+  const [translating, setTranslating] = useState(null);
 
   async function handleFrBlur() {
     if (!fr.trim() || he.trim()) return;
@@ -247,6 +243,7 @@ function ItemModal({ item, cat, valueLabel, unit, onSave, onClose }) {
         fr: fr.trim(),
         he: he.trim(),
         val: parsedVal,
+        unit,
         cat,
       });
     } finally {
@@ -256,7 +253,7 @@ function ItemModal({ item, cat, valueLabel, unit, onSave, onClose }) {
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(91,32,58,0.55)", display: "flex", alignItems: "flex-end", zIndex: 60 }} onClick={onClose}>
-      <div style={{ background: "var(--pink-card)", width: "100%", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: "22px 20px calc(22px + env(safe-area-inset-bottom))" }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ background: "var(--pink-card)", width: "100%", maxHeight: "90vh", overflowY: "auto", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: "22px 20px calc(22px + env(safe-area-inset-bottom))" }} onClick={(e) => e.stopPropagation()}>
         <h3 className="disp" style={{ margin: "0 0 14px" }}>{item ? "Modifier l'item" : "Nouvel item"}</h3>
         {error && <div className="error-banner">{error}</div>}
         <form onSubmit={handleSubmit}>
@@ -269,7 +266,24 @@ function ItemModal({ item, cat, valueLabel, unit, onSave, onClose }) {
             <input dir="rtl" value={he} onChange={(e) => setHe(e.target.value)} onBlur={handleHeBlur} placeholder="לסדר את החדר" />
           </div>
           <div className="field">
-            <label>{valueLabel} {unit ? `(${unit})` : ""}</label>
+            <label>Type de récompense</label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {UNIT_OPTIONS.map((opt) => (
+                <button
+                  type="button" key={opt.key} onClick={() => setUnit(opt.symbol)}
+                  style={{
+                    flex: "0 0 auto", padding: "8px 12px", borderRadius: 10, fontSize: 12, cursor: "pointer",
+                    border: unit === opt.symbol ? "2px solid var(--pink-header)" : "1px solid var(--pink-input-border)",
+                    background: unit === opt.symbol ? "rgba(214,49,124,0.08)" : "transparent",
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="field">
+            <label>{valueLabel} ({unit})</label>
             <input
               inputMode="decimal" value={val}
               onChange={(e) => setVal(e.target.value.replace(/[^0-9.,]/g, ""))}
