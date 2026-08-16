@@ -3,6 +3,20 @@ import { watchChildProfile, watchSettings, saveSettings } from "../services/fire
 import { BUILTIN_CATALOG, HOUSE_RULES, PAYMENT_RULE, UNIT_OPTIONS } from "../data/missionCatalog.js";
 import { translateFrToHe, translateHeToFr, getItemLabel } from "../services/translate.js";
 import { useLang, LanguageSwitcher } from "../i18n.jsx";
+import OnboardingTour from "./OnboardingTour.jsx";
+
+const PENDING_TAB_KEY = "kidmission_pending_tab";
+const DISCOVER_LABEL = { fr: "❓ Découvrir KidMission", he: "❓ להכיר את KidMission", en: "❓ Discover KidMission", ru: "❓ Узнать о KidMission" };
+
+function readAndClearPendingTab() {
+  try {
+    const val = sessionStorage.getItem(PENDING_TAB_KEY);
+    if (val) sessionStorage.removeItem(PENDING_TAB_KEY);
+    return val;
+  } catch {
+    return null;
+  }
+}
 
 function useItemLabel(item, lang) {
   const [label, setLabel] = useState(lang === "he" ? (item.he || item.fr) : item.fr);
@@ -18,11 +32,12 @@ export default function ChildSettings({ familyId, childId, onBack }) {
   const { lang, setLang, t, dir } = useLang();
   const [profile, setProfile] = useState(undefined);
   const [settings, setSettings] = useState(undefined);
-  const [activeTab, setActiveTab] = useState("bonus");
+  const [activeTab, setActiveTab] = useState(() => readAndClearPendingTab() || "bonus");
   const [editingItem, setEditingItem] = useState(null);
   const [editingRule, setEditingRule] = useState(null);
   const [showHiddenItems, setShowHiddenItems] = useState(false);
   const [showHiddenRules, setShowHiddenRules] = useState(false);
+  const [showTour, setShowTour] = useState(false);
 
   const TABS = [
     { key: "bonus", label: t("tabBonus"), valueLabel: t("valAmount"), sign: "+" },
@@ -74,7 +89,7 @@ export default function ChildSettings({ familyId, childId, onBack }) {
 
   async function handleSaveItem(item) {
     if (item._builtinId) {
-      await persist({ builtinOverrides: { ...builtinOverrides, [item._builtinId]: { fr: item.fr, he: item.he, val: item.val, unit: item.unit } } });
+      await persist({ builtinOverrides: { ...builtinOverrides, [item._builtinId]: { fr: item.fr, he: item.he, val: item.val, unit: item.unit, severity: item.severity } } });
       setEditingItem(null);
       return;
     }
@@ -100,7 +115,6 @@ export default function ChildSettings({ familyId, childId, onBack }) {
     await persist({ hiddenBuiltinIds: next });
   }
 
-  // --- Rules handlers ---
   async function handleSaveRule(rule) {
     if (rule._paymentRule) {
       await persist({ paymentRuleOverride: { fr: rule.fr, he: rule.he } });
@@ -147,7 +161,6 @@ export default function ChildSettings({ familyId, childId, onBack }) {
   const hiddenBuiltinForTab = allBuiltinForTab.filter((item) => hiddenBuiltinIds[item.id]);
   const customForTab = tab?.readOnly ? [] : customItems.filter((it) => it.cat === activeTab);
 
-  // Rules data
   const houseRulesWithIds = HOUSE_RULES.map((r, i) => ({ ...r, id: `rule-${i}` }));
   const mergeRule = (r) => (houseRuleOverrides[r.id] ? { ...r, ...houseRuleOverrides[r.id] } : r);
   const visibleHouseRules = houseRulesWithIds.filter((r) => !hiddenRuleIds[r.id]).map(mergeRule);
@@ -171,6 +184,12 @@ export default function ChildSettings({ familyId, childId, onBack }) {
         <p style={{ fontSize: 12.5, opacity: 0.85, margin: "4px 0 0" }}>
           {t("defaultCurrency", { unit: profile?.currencyUnit })}
         </p>
+        <button
+          onClick={() => setShowTour(true)}
+          style={{ background: "none", border: "none", color: "rgba(255,255,255,0.85)", fontSize: 11.5, fontWeight: 600, cursor: "pointer", padding: 0, marginTop: 8, textDecoration: "underline" }}
+        >
+          {DISCOVER_LABEL[lang] || DISCOVER_LABEL.fr}
+        </button>
       </div>
 
       <div style={{ padding: "16px 16px 0" }}>
@@ -287,6 +306,17 @@ export default function ChildSettings({ familyId, childId, onBack }) {
           rule={editingRule === "new" ? null : editingRule}
           onSave={handleSaveRule}
           onClose={() => setEditingRule(null)}
+        />
+      )}
+
+      {showTour && (
+        <OnboardingTour
+          familyId={familyId}
+          childName={profile?.displayName}
+          unitLabel={profile?.currencyUnit}
+          lang={lang}
+          onShortcut={(tabKey) => setActiveTab(tabKey)}
+          onClose={() => setShowTour(false)}
         />
       )}
     </div>
@@ -526,11 +556,13 @@ function ItemModal({ item, cat, valueLabel, defaultUnit, t, onSave, onClose }) {
   const [he, setHe] = useState(item?.he || "");
   const [val, setVal] = useState(item ? item.val.toString() : "");
   const [unit, setUnit] = useState(item?.unit || defaultUnit);
+  const [severity, setSeverity] = useState(item?.severity || "small");
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [translating, setTranslating] = useState(null);
 
   const isBuiltinEdit = !!item?._builtinId;
+  const isMalus = cat === "malus";
 
   async function handleFrBlur() {
     if (!fr.trim() || he.trim()) return;
@@ -565,6 +597,7 @@ function ItemModal({ item, cat, valueLabel, defaultUnit, t, onSave, onClose }) {
         val: parsedVal,
         unit,
         cat,
+        severity: isMalus ? severity : undefined,
       });
     } finally {
       setSaving(false);
@@ -604,6 +637,33 @@ function ItemModal({ item, cat, valueLabel, defaultUnit, t, onSave, onClose }) {
               ))}
             </div>
           </div>
+          {isMalus && (
+            <div className="field">
+              <label>Gravité (contrôle si un joker peut annuler ce malus)</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button" onClick={() => setSeverity("small")}
+                  style={{
+                    flex: 1, padding: "8px 12px", borderRadius: 10, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                    border: severity === "small" ? "2px solid var(--pink-header)" : "1px solid var(--pink-input-border)",
+                    background: severity === "small" ? "rgba(214,49,124,0.08)" : "transparent",
+                  }}
+                >
+                  🔹 Petit malus
+                </button>
+                <button
+                  type="button" onClick={() => setSeverity("large")}
+                  style={{
+                    flex: 1, padding: "8px 12px", borderRadius: 10, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                    border: severity === "large" ? "2px solid var(--red)" : "1px solid var(--pink-input-border)",
+                    background: severity === "large" ? "rgba(211,60,60,0.08)" : "transparent",
+                  }}
+                >
+                  🔺 Gros malus
+                </button>
+              </div>
+            </div>
+          )}
           <div className="field">
             <label>{valueLabel} ({unit})</label>
             <input
