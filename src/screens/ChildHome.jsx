@@ -8,11 +8,22 @@ import { getItemLabel } from "../services/translate.js";
 import { BUILTIN_CATALOG } from "../data/missionCatalog.js";
 import { useLang, LanguageSwitcher } from "../i18n.jsx";
 
-const MISSION_CATS = ["bonus", "malus", "weekly"];
-const JOKER_CATS = ["jokerEarn", "jokerUse"];
+const BONUS_CATS = ["bonus", "weekly"];
+const MALUS_CATS = ["malus"];
+const JOKER_EARN_CATS = ["jokerEarn"];
+const JOKER_USE_CATS = ["jokerUse"];
 const REWARD_CATS = ["reward"];
 
 const LOCALES = { fr: "fr-FR", he: "he-IL", en: "en-GB", ru: "ru-RU" };
+
+// Petits libellés d'onglets bilingues, indépendants du fichier i18n.jsx
+// (pas besoin de toucher i18n.jsx pour ce correctif)
+const TAB_LABELS = {
+  bonus: { fr: "🎯 Bonus", he: "🎯 בונוסים", en: "🎯 Bonus", ru: "🎯 Бонусы" },
+  malus: { fr: "⚠️ Malus", he: "⚠️ קנסות", en: "⚠️ Malus", ru: "⚠️ Штрафы" },
+  jokerEarn: { fr: "🃏 Jokers gagnés", he: "🃏 ג'וקרים שהורווחו", en: "🃏 Jokers earned", ru: "🃏 Заработанные джокеры" },
+  jokerUse: { fr: "🃏 Jokers à dépenser", he: "🃏 ג'וקרים לשימוש", en: "🃏 Jokers to spend", ru: "🃏 Джокеры на использование" },
+};
 
 function signFor(cat) {
   return cat === "malus" || cat === "jokerUse" ? -1 : 1;
@@ -49,7 +60,7 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
   const [settings, setSettings] = useState(undefined);
   const [entries, setEntries] = useState(undefined);
   const [claims, setClaims] = useState(undefined);
-  const [activeTab, setActiveTab] = useState("missions");
+  const [activeTab, setActiveTab] = useState("bonus");
   const [busyId, setBusyId] = useState(null);
 
   useEffect(() => watchChildProfile(familyId, childId, setProfile), [familyId, childId]);
@@ -122,6 +133,15 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
     ...claims.map((c) => ({ ...c, kind: "claim", fr: c.fr, he: c.he })),
   ].sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
 
+  const tabs = [
+    { key: "bonus", label: TAB_LABELS.bonus[lang] || TAB_LABELS.bonus.fr },
+    { key: "malus", label: TAB_LABELS.malus[lang] || TAB_LABELS.malus.fr },
+    { key: "jokerEarn", label: TAB_LABELS.jokerEarn[lang] || TAB_LABELS.jokerEarn.fr },
+    { key: "jokerUse", label: TAB_LABELS.jokerUse[lang] || TAB_LABELS.jokerUse.fr },
+    { key: "rewards", label: t("tabRewards") },
+    { key: "requests", label: t("tabRequests") },
+  ];
+
   return (
     <div dir={dir} style={{ minHeight: "100vh", background: "var(--pink-bg)", paddingBottom: 40 }}>
       <div style={{ background: "var(--pink-header)", color: "#fff", padding: "calc(20px + env(safe-area-inset-top)) 20px 18px", borderBottomLeftRadius: 20, borderBottomRightRadius: 20 }}>
@@ -146,12 +166,7 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
 
       <div style={{ padding: "16px 16px 0" }}>
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
-          {[
-            { key: "missions", label: t("tabMissions") },
-            { key: "jokers", label: t("tabJokers") },
-            { key: "rewards", label: t("tabRewards") },
-            { key: "requests", label: t("tabRequests") },
-          ].map((tab) => (
+          {tabs.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
@@ -169,11 +184,17 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
       </div>
 
       <div style={{ padding: "16px 16px 0" }}>
-        {activeTab === "missions" && (
-          <MissionList items={itemsFor(MISSION_CATS)} currencyUnit={profile.currencyUnit} onAct={handleDeclare} busyId={busyId} isParent={isParent} lang={lang} t={t} />
+        {activeTab === "bonus" && (
+          <MissionList items={itemsFor(BONUS_CATS)} currencyUnit={profile.currencyUnit} onAct={handleDeclare} busyId={busyId} isParent={isParent} lang={lang} t={t} />
         )}
-        {activeTab === "jokers" && (
-          <MissionList items={itemsFor(JOKER_CATS)} currencyUnit={profile.currencyUnit} onAct={handleDeclare} busyId={busyId} isParent={isParent} lang={lang} t={t} />
+        {activeTab === "malus" && (
+          <MissionList items={itemsFor(MALUS_CATS)} currencyUnit={profile.currencyUnit} onAct={handleDeclare} busyId={busyId} isParent={isParent} lang={lang} t={t} />
+        )}
+        {activeTab === "jokerEarn" && (
+          <MissionList items={itemsFor(JOKER_EARN_CATS)} currencyUnit={profile.currencyUnit} onAct={handleDeclare} busyId={busyId} isParent={isParent} lang={lang} t={t} />
+        )}
+        {activeTab === "jokerUse" && (
+          <MissionList items={itemsFor(JOKER_USE_CATS)} currencyUnit={profile.currencyUnit} onAct={handleDeclare} busyId={busyId} isParent={isParent} lang={lang} t={t} />
         )}
         {activeTab === "rewards" && (
           <RewardList items={itemsFor(REWARD_CATS)} currencyUnit={profile.currencyUnit} onAct={handleClaim} busyId={busyId} isParent={isParent} lang={lang} t={t} />
