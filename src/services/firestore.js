@@ -70,10 +70,12 @@ export function watchEntries(familyId, childId, callback) {
  * createdBy/createdAt/status here match exactly what firestore.rules checks for a
  * child's own submission — keep this in sync with the rules file if either changes.
  *
- * `severity` is only meaningful for cat === "malus" ("small" | "large"). It is
- * denormalized onto the entry itself (rather than looked up later from the
- * catalog) so that a joker-cancel eligibility check still works correctly even
- * if the catalog item is later edited, hidden, or deleted.
+ * `severity` is only meaningful for cat === "malus" ("small" | "large" | null).
+ * It is denormalized onto the entry itself (rather than looked up later from the
+ * catalog) so that joker-cancel eligibility still works correctly even if the
+ * catalog item is later edited, hidden, or deleted. A malus with severity !== "small"
+ * (including null/undefined, e.g. older entries created before this feature) can
+ * NEVER be cancelled with a joker — see useJokerOnMalus below.
  */
 export async function addEntry(familyId, childId, { itemId, he, fr, amt, unit, cat, createdBy, isParent, severity }) {
   await addDoc(collection(db, `families/${familyId}/children/${childId}/entries`), {
@@ -133,9 +135,14 @@ export async function cancelEntry(familyId, childId, entryId, cancelledBy) {
 /**
  * Attempts to use a joker to cancel a specific malus entry.
  * Runs as a Firestore transaction so the eligibility check (malus still
- * confirmed, not already cancelled, severity !== "large") and the write
- * happen atomically — a malus can never be cancelled twice, even with a
- * double-tap or two devices acting at once.
+ * confirmed, severity exactly "small") and the write happen atomically —
+ * a malus can never be cancelled twice, even with a double-tap or two
+ * devices acting at once.
+ *
+ * Eligibility is a WHITELIST: only severity === "small" is allowed. Anything
+ * else — "large", or no severity set at all (e.g. an older malus entry from
+ * before this feature existed, or a custom malus someone forgot to tag) — is
+ * refused. This is deliberately the safer default.
  *
  * - If isParent (Maman is acting directly): the malus is cancelled immediately
  *   and the joker-spend entry is created already "confirmed".
@@ -145,7 +152,7 @@ export async function cancelEntry(familyId, childId, entryId, cancelledBy) {
  *   approveEntry, which re-runs this same eligibility check at that time.
  *
  * Throws an Error with a user-facing French message if the malus is no longer
- * eligible (already cancelled, too severe, or gone).
+ * eligible (already cancelled, too severe/undefined, or gone).
  */
 export async function useJokerOnMalus(familyId, childId, { malusEntryId, jokerItemId, jokerVal, fr, he, createdBy, isParent }) {
   const malusRef = doc(db, `families/${familyId}/children/${childId}/entries`, malusEntryId);
@@ -158,7 +165,7 @@ export async function useJokerOnMalus(familyId, childId, { malusEntryId, jokerIt
     const malus = malusSnap.data();
     if (malus.cat !== "malus") throw new Error("Cible invalide : ce n'est pas un malus.");
     if (malus.status !== "confirmed") throw new Error("Ce malus n'est plus disponible (déjà annulé ou en attente).");
-    if (malus.severity === "large") throw new Error("Ce malus est trop grave pour être annulé avec un joker.");
+    if (malus.severity !== "small") throw new Error("Ce malus ne peut pas être annulé avec un joker.");
 
     if (isParent) {
       tx.update(malusRef, {
@@ -192,10 +199,10 @@ async function approveLinkedMalusCancel(familyId, childId, entryId, linkedMalusI
     const entry = entrySnap.data();
     const malus = malusSnap.data();
     if (malus.status !== "confirmed") {
-      throw new Error("Ce malus a déjà été traité entre-temps (annulé ou modifié) — refuse cette demande.");
+      throw new Error("Ce malus a déjà été traité entre-temps — refuse cette demande.");
     }
-    if (malus.severity === "large") {
-      throw new Error("Ce malus est trop grave pour être annulé avec un joker — refuse cette demande.");
+    if (malus.severity !== "small") {
+      throw new Error("Ce malus ne peut pas être annulé avec un joker — refuse cette demande.");
     }
     tx.update(malusRef, {
       status: "cancelled",
