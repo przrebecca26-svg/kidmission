@@ -1,13 +1,23 @@
-import { useEffect, useState } from "react";
-import { watchAllChildren, createChildProfile } from "../services/firestore.js";
+import { useEffect, useRef, useState } from "react";
+import { watchAllChildren, createChildProfile, watchFamily } from "../services/firestore.js";
 import { createChildLogin, logout } from "../services/auth.js";
 import { translateFirebaseError } from "./SignupParent.jsx";
 import { useLang, LanguageSwitcher } from "../i18n.jsx";
+import OnboardingTour from "./OnboardingTour.jsx";
+
+const PENDING_TAB_KEY = "kidmission_pending_tab";
+
+const DISCOVER_LABEL = { fr: "❓ Découvrir KidMission", he: "❓ להכיר את KidMission", en: "❓ Discover KidMission", ru: "❓ Узнать о KidMission" };
+const PICK_CHILD_TITLE = { fr: "Pour quel enfant ?", he: "עבור איזה ילד/ה?", en: "For which child?", ru: "Для какого ребёнка?" };
 
 export default function FamilyHome({ familyId, onOpenChild, onOpenSettings, onOpenPayments, onOpenAccess }) {
   const { lang, setLang, t, dir } = useLang();
   const [children, setChildren] = useState(null);
+  const [family, setFamily] = useState(undefined);
   const [showAdd, setShowAdd] = useState(false);
+  const [tourChild, setTourChild] = useState(null);
+  const [showChildPicker, setShowChildPicker] = useState(false);
+  const prevCountRef = useRef(null);
 
   const CURRENCY_OPTIONS = [
     { type: "money", unit: "₪", label: t("currencyMoney") },
@@ -16,6 +26,35 @@ export default function FamilyHome({ familyId, onOpenChild, onOpenSettings, onOp
   ];
 
   useEffect(() => watchAllChildren(familyId, setChildren), [familyId]);
+  useEffect(() => watchFamily(familyId, setFamily), [familyId]);
+
+  useEffect(() => {
+    if (children === null || family === undefined || family === null) return;
+    if (prevCountRef.current === 0 && children.length === 1 && family.onboardingSeen === false) {
+      const first = children[0];
+      setTourChild({ id: first.id, displayName: first.displayName, currencyUnit: first.currencyUnit });
+    }
+    prevCountRef.current = children.length;
+  }, [children, family]);
+
+  function currencyLabelFor(child) {
+    return CURRENCY_OPTIONS.find((o) => o.unit === child?.currencyUnit)?.label || child?.currencyUnit || "";
+  }
+
+  function handleTourShortcut(childId, tabKey) {
+    try { sessionStorage.setItem(PENDING_TAB_KEY, tabKey); } catch { /* non-blocking */ }
+    onOpenSettings(childId);
+  }
+
+  function openDiscover() {
+    if (!children || children.length === 0) return;
+    if (children.length === 1) {
+      const only = children[0];
+      setTourChild({ id: only.id, displayName: only.displayName, currencyUnit: only.currencyUnit });
+    } else {
+      setShowChildPicker(true);
+    }
+  }
 
   return (
     <div dir={dir} style={{ minHeight: "100vh", background: "var(--pink-bg)", paddingBottom: 40 }}>
@@ -50,7 +89,7 @@ export default function FamilyHome({ familyId, onOpenChild, onOpenSettings, onOp
               >
                 <span style={{ fontSize: 15, fontWeight: 600 }}>🧒 {c.displayName}</span>
                 <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
-                  {CURRENCY_OPTIONS.find((o) => o.type === c.currencyType)?.label}
+                  {currencyLabelFor(c)}
                 </span>
               </button>
               <button
@@ -81,17 +120,70 @@ export default function FamilyHome({ familyId, onOpenChild, onOpenSettings, onOp
         <button className="btn-primary" style={{ marginTop: 18 }} onClick={() => setShowAdd(true)}>
           {t("addChild")}
         </button>
+
+        {children && children.length > 0 && (
+          <button
+            onClick={openDiscover}
+            style={{ display: "block", margin: "16px auto 0", background: "none", border: "none", color: "var(--text-faint)", fontSize: 12.5, fontWeight: 600, cursor: "pointer", textDecoration: "underline" }}
+          >
+            {DISCOVER_LABEL[lang] || DISCOVER_LABEL.fr}
+          </button>
+        )}
       </div>
 
       {showAdd && (
         <AddChildModal familyId={familyId} onClose={() => setShowAdd(false)} t={t} lang={lang} currencyOptions={CURRENCY_OPTIONS} />
       )}
+
+      {showChildPicker && (
+        <ChildPickerModal
+          children={children || []}
+          lang={lang}
+          onPick={(child) => {
+            setShowChildPicker(false);
+            setTourChild({ id: child.id, displayName: child.displayName, currencyUnit: child.currencyUnit });
+          }}
+          onClose={() => setShowChildPicker(false)}
+        />
+      )}
+
+      {tourChild && (
+        <OnboardingTour
+          familyId={familyId}
+          childName={tourChild.displayName}
+          unitLabel={currencyLabelFor(tourChild)}
+          lang={lang}
+          onShortcut={(tabKey) => handleTourShortcut(tourChild.id, tabKey)}
+          onClose={() => setTourChild(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ChildPickerModal({ children, lang, onPick, onClose }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(91,32,58,0.55)", display: "flex", alignItems: "flex-end", zIndex: 70 }} onClick={onClose}>
+      <div style={{ background: "var(--pink-card)", width: "100%", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: "22px 20px calc(22px + env(safe-area-inset-bottom))" }} onClick={(e) => e.stopPropagation()}>
+        <h3 className="disp" style={{ margin: "0 0 14px" }}>{PICK_CHILD_TITLE[lang] || PICK_CHILD_TITLE.fr}</h3>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {children.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => onPick(c)}
+              style={{ textAlign: "left", background: "var(--pink-bg)", border: "1px solid var(--pink-border)", borderRadius: 12, padding: "12px 14px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
+            >
+              🧒 {c.displayName}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
 
 function AddChildModal({ familyId, onClose, t, lang, currencyOptions }) {
-  const [step, setStep] = useState("profile"); // "profile" | "login" | "done"
+  const [step, setStep] = useState("profile");
   const [displayName, setDisplayName] = useState("");
   const [currency, setCurrency] = useState(currencyOptions[0]);
   const [username, setUsername] = useState("");
