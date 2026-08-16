@@ -20,7 +20,9 @@ export default function ChildSettings({ familyId, childId, onBack }) {
   const [settings, setSettings] = useState(undefined);
   const [activeTab, setActiveTab] = useState("bonus");
   const [editingItem, setEditingItem] = useState(null);
-  const [showHidden, setShowHidden] = useState(false);
+  const [editingRule, setEditingRule] = useState(null);
+  const [showHiddenItems, setShowHiddenItems] = useState(false);
+  const [showHiddenRules, setShowHiddenRules] = useState(false);
 
   const TABS = [
     { key: "bonus", label: t("tabBonus"), valueLabel: t("valAmount"), sign: "+" },
@@ -39,26 +41,30 @@ export default function ChildSettings({ familyId, childId, onBack }) {
     return () => unsub && unsub();
   }, [familyId, childId]);
 
-  useEffect(() => { setShowHidden(false); }, [activeTab]);
+  useEffect(() => { setShowHiddenItems(false); }, [activeTab]);
 
   const enabledIds = settings?.enabledIds || {};
   const customItems = settings?.customItems || [];
   const builtinOverrides = settings?.builtinOverrides || {};
   const hiddenBuiltinIds = settings?.hiddenBuiltinIds || {};
+  const houseRuleOverrides = settings?.houseRuleOverrides || {};
+  const hiddenRuleIds = settings?.hiddenRuleIds || {};
+  const customRules = settings?.customRules || [];
+  const paymentRuleOverride = settings?.paymentRuleOverride || null;
+
   const tab = TABS.find((tb) => tb.key === activeTab);
   const defaultUnit = tab?.unit || profile?.currencyUnit || "";
 
-  async function persist(nextEnabledIds, nextCustomItems, nextBuiltinOverrides, nextHiddenBuiltinIds) {
+  async function persist(partial) {
     await saveSettings(familyId, childId, {
-      enabledIds: nextEnabledIds ?? enabledIds,
-      customItems: nextCustomItems ?? customItems,
-      builtinOverrides: nextBuiltinOverrides ?? builtinOverrides,
-      hiddenBuiltinIds: nextHiddenBuiltinIds ?? hiddenBuiltinIds,
+      enabledIds, customItems, builtinOverrides, hiddenBuiltinIds,
+      houseRuleOverrides, hiddenRuleIds, customRules, paymentRuleOverride,
+      ...partial,
     });
   }
 
   function toggleBuiltin(id) {
-    persist({ ...enabledIds, [id]: !enabledIds[id] });
+    persist({ enabledIds: { ...enabledIds, [id]: !enabledIds[id] } });
   }
 
   function mergedBuiltin(item) {
@@ -68,8 +74,7 @@ export default function ChildSettings({ familyId, childId, onBack }) {
 
   async function handleSaveItem(item) {
     if (item._builtinId) {
-      const next = { ...builtinOverrides, [item._builtinId]: { fr: item.fr, he: item.he, val: item.val, unit: item.unit } };
-      await persist(undefined, undefined, next);
+      await persist({ builtinOverrides: { ...builtinOverrides, [item._builtinId]: { fr: item.fr, he: item.he, val: item.val, unit: item.unit } } });
       setEditingItem(null);
       return;
     }
@@ -77,22 +82,56 @@ export default function ChildSettings({ familyId, childId, onBack }) {
     const next = exists
       ? customItems.map((it) => (it.id === item.id ? item : it))
       : [...customItems, item];
-    await persist(undefined, next);
+    await persist({ customItems: next });
     setEditingItem(null);
   }
 
   async function handleDeleteCustomItem(itemId) {
-    await persist(undefined, customItems.filter((it) => it.id !== itemId));
+    await persist({ customItems: customItems.filter((it) => it.id !== itemId) });
   }
 
   async function handleHideBuiltin(itemId) {
-    await persist(undefined, undefined, undefined, { ...hiddenBuiltinIds, [itemId]: true });
+    await persist({ hiddenBuiltinIds: { ...hiddenBuiltinIds, [itemId]: true } });
   }
 
   async function handleRestoreBuiltin(itemId) {
     const next = { ...hiddenBuiltinIds };
     delete next[itemId];
-    await persist(undefined, undefined, undefined, next);
+    await persist({ hiddenBuiltinIds: next });
+  }
+
+  // --- Rules handlers ---
+  async function handleSaveRule(rule) {
+    if (rule._paymentRule) {
+      await persist({ paymentRuleOverride: { fr: rule.fr, he: rule.he } });
+      setEditingRule(null);
+      return;
+    }
+    if (rule._builtinRuleId) {
+      await persist({ houseRuleOverrides: { ...houseRuleOverrides, [rule._builtinRuleId]: { fr: rule.fr, he: rule.he } } });
+      setEditingRule(null);
+      return;
+    }
+    const exists = customRules.some((r) => r.id === rule.id);
+    const next = exists
+      ? customRules.map((r) => (r.id === rule.id ? rule : r))
+      : [...customRules, rule];
+    await persist({ customRules: next });
+    setEditingRule(null);
+  }
+
+  async function handleDeleteCustomRule(ruleId) {
+    await persist({ customRules: customRules.filter((r) => r.id !== ruleId) });
+  }
+
+  async function handleHideRule(ruleId) {
+    await persist({ hiddenRuleIds: { ...hiddenRuleIds, [ruleId]: true } });
+  }
+
+  async function handleRestoreRule(ruleId) {
+    const next = { ...hiddenRuleIds };
+    delete next[ruleId];
+    await persist({ hiddenRuleIds: next });
   }
 
   if (profile === undefined || settings === undefined) {
@@ -107,6 +146,15 @@ export default function ChildSettings({ familyId, childId, onBack }) {
   const visibleBuiltinForTab = allBuiltinForTab.filter((item) => !hiddenBuiltinIds[item.id]);
   const hiddenBuiltinForTab = allBuiltinForTab.filter((item) => hiddenBuiltinIds[item.id]);
   const customForTab = tab?.readOnly ? [] : customItems.filter((it) => it.cat === activeTab);
+
+  // Rules data
+  const houseRulesWithIds = HOUSE_RULES.map((r, i) => ({ ...r, id: `rule-${i}` }));
+  const mergeRule = (r) => (houseRuleOverrides[r.id] ? { ...r, ...houseRuleOverrides[r.id] } : r);
+  const visibleHouseRules = houseRulesWithIds.filter((r) => !hiddenRuleIds[r.id]).map(mergeRule);
+  const hiddenHouseRules = houseRulesWithIds.filter((r) => hiddenRuleIds[r.id]).map(mergeRule);
+  const paymentRuleMerged = paymentRuleOverride
+    ? { ...PAYMENT_RULE, ...paymentRuleOverride, id: "payment-rule" }
+    : { ...PAYMENT_RULE, id: "payment-rule" };
 
   return (
     <div dir={dir} style={{ minHeight: "100vh", background: "var(--pink-bg)", paddingBottom: 40 }}>
@@ -145,7 +193,23 @@ export default function ChildSettings({ familyId, childId, onBack }) {
       </div>
 
       {tab.readOnly ? (
-        <RulesPanel lang={lang} t={t} />
+        <RulesPanel
+          lang={lang}
+          t={t}
+          paymentRule={paymentRuleMerged}
+          houseRulesVisible={visibleHouseRules}
+          houseRulesHidden={hiddenHouseRules}
+          customRules={customRules}
+          showHiddenRules={showHiddenRules}
+          setShowHiddenRules={setShowHiddenRules}
+          onEditPayment={() => setEditingRule({ ...paymentRuleMerged, _paymentRule: true })}
+          onEditBuiltinRule={(rule) => setEditingRule({ ...rule, _builtinRuleId: rule.id })}
+          onHideRule={handleHideRule}
+          onRestoreRule={handleRestoreRule}
+          onEditCustomRule={(rule) => setEditingRule(rule)}
+          onDeleteCustomRule={handleDeleteCustomRule}
+          onAddRule={() => setEditingRule("new")}
+        />
       ) : (
         <div style={{ padding: "16px 16px 0" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -182,12 +246,12 @@ export default function ChildSettings({ familyId, childId, onBack }) {
           {hiddenBuiltinForTab.length > 0 && (
             <div style={{ marginTop: 18 }}>
               <button
-                onClick={() => setShowHidden((v) => !v)}
+                onClick={() => setShowHiddenItems((v) => !v)}
                 style={{ background: "none", border: "none", color: "var(--text-faint)", fontSize: 12.5, cursor: "pointer", padding: 0, textDecoration: "underline" }}
               >
-                {showHidden ? "▲ " : "▼ "}Items masqués ({hiddenBuiltinForTab.length})
+                {showHiddenItems ? "▲ " : "▼ "}Items masqués ({hiddenBuiltinForTab.length})
               </button>
-              {showHidden && (
+              {showHiddenItems && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
                   {hiddenBuiltinForTab.map((item) => (
                     <HiddenRow
@@ -215,6 +279,14 @@ export default function ChildSettings({ familyId, childId, onBack }) {
           t={t}
           onSave={handleSaveItem}
           onClose={() => setEditingItem(null)}
+        />
+      )}
+
+      {editingRule && (
+        <RuleModal
+          rule={editingRule === "new" ? null : editingRule}
+          onSave={handleSaveRule}
+          onClose={() => setEditingRule(null)}
         />
       )}
     </div>
@@ -285,23 +357,165 @@ function HiddenRow({ item, lang, sign, unit, onRestore }) {
 
 function RuleRow({ rule, lang }) {
   const label = useItemLabel(rule, lang);
-  return <p style={{ fontSize: 13.5, margin: 0 }}>✅ {label}</p>;
+  return <p style={{ fontSize: 13.5, margin: 0, flex: 1 }}>✅ {label}</p>;
 }
 
-function RulesPanel({ lang, t }) {
-  const paymentLabel = useItemLabel({ ...PAYMENT_RULE, id: "payment-rule" }, lang);
+function RulesPanel({
+  lang, t, paymentRule, houseRulesVisible, houseRulesHidden, customRules,
+  showHiddenRules, setShowHiddenRules,
+  onEditPayment, onEditBuiltinRule, onHideRule, onRestoreRule,
+  onEditCustomRule, onDeleteCustomRule, onAddRule,
+}) {
+  const paymentLabel = useItemLabel(paymentRule, lang);
   return (
     <div style={{ padding: "16px 16px 0" }}>
       <div style={{ background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 14, padding: "16px 16px", marginBottom: 14 }}>
-        <h3 className="disp" style={{ margin: "0 0 10px", fontSize: 16 }}>{t("paymentSectionTitle")}</h3>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+          <h3 className="disp" style={{ margin: 0, fontSize: 16 }}>{t("paymentSectionTitle")}</h3>
+          <button onClick={onEditPayment} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15 }}>✏️</button>
+        </div>
         <p style={{ fontSize: 13.5, margin: 0 }}>{paymentLabel}</p>
       </div>
+
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {HOUSE_RULES.map((rule, i) => (
-          <div key={i} style={{ background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 12, padding: "12px 14px" }}>
-            <RuleRow rule={{ ...rule, id: `rule-${i}` }} lang={lang} />
+        {houseRulesVisible.map((rule) => (
+          <div key={rule.id} style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 12, padding: "12px 14px" }}>
+            <RuleRow rule={rule} lang={lang} />
+            <div style={{ display: "flex", gap: 8, flex: "0 0 auto" }}>
+              <button onClick={() => onEditBuiltinRule(rule)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15 }}>✏️</button>
+              <button
+                onClick={() => {
+                  if (window.confirm("Masquer cette règle ? Tu pourras la restaurer plus tard depuis « Règles masquées ».")) onHideRule(rule.id);
+                }}
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15 }}
+              >
+                🗑️
+              </button>
+            </div>
           </div>
         ))}
+
+        {customRules.map((rule) => (
+          <div key={rule.id} style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, background: "var(--pink-card)", border: "1px dashed var(--pink-header)", borderRadius: 12, padding: "12px 14px" }}>
+            <RuleRow rule={rule} lang={lang} />
+            <div style={{ display: "flex", gap: 8, flex: "0 0 auto" }}>
+              <button onClick={() => onEditCustomRule(rule)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15 }}>✏️</button>
+              <button onClick={() => onDeleteCustomRule(rule.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 15 }}>🗑️</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <button className="btn-primary" style={{ marginTop: 16 }} onClick={onAddRule}>
+        + Ajouter une règle
+      </button>
+
+      {houseRulesHidden.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <button
+            onClick={() => setShowHiddenRules((v) => !v)}
+            style={{ background: "none", border: "none", color: "var(--text-faint)", fontSize: 12.5, cursor: "pointer", padding: 0, textDecoration: "underline" }}
+          >
+            {showHiddenRules ? "▲ " : "▼ "}Règles masquées ({houseRulesHidden.length})
+          </button>
+          {showHiddenRules && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
+              {houseRulesHidden.map((rule) => (
+                <div key={rule.id} style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, background: "var(--pink-bg)", border: "1px solid var(--pink-border)", borderRadius: 12, padding: "10px 14px", opacity: 0.75 }}>
+                  <RuleRow rule={rule} lang={lang} />
+                  <button onClick={() => onRestoreRule(rule.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13.5, flex: "0 0 auto" }}>↩️ Restaurer</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RuleModal({ rule, onSave, onClose }) {
+  const [fr, setFr] = useState(rule?.fr || "");
+  const [he, setHe] = useState(rule?.he || "");
+  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [translating, setTranslating] = useState(null);
+
+  const title = rule?._paymentRule
+    ? "Modifier la règle de versement"
+    : rule?._builtinRuleId
+    ? "Modifier cette règle"
+    : rule
+    ? "Modifier la règle"
+    : "Nouvelle règle";
+
+  async function handleFrBlur() {
+    if (!fr.trim() || he.trim()) return;
+    setTranslating("he");
+    const result = await translateFrToHe(fr);
+    if (result) setHe(result);
+    setTranslating(null);
+  }
+
+  async function handleHeBlur() {
+    if (!he.trim() || fr.trim()) return;
+    setTranslating("fr");
+    const result = await translateHeToFr(he);
+    if (result) setFr(result);
+    setTranslating(null);
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError(null);
+    if (!fr.trim()) { setError("Merci de saisir le texte en français."); return; }
+
+    setSaving(true);
+    try {
+      await onSave({
+        id: rule?.id || `custom-rule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        _builtinRuleId: rule?._builtinRuleId,
+        _paymentRule: rule?._paymentRule,
+        fr: fr.trim(),
+        he: he.trim(),
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(91,32,58,0.55)", display: "flex", alignItems: "flex-end", zIndex: 60 }} onClick={onClose}>
+      <div style={{ background: "var(--pink-card)", width: "100%", maxHeight: "90vh", overflowY: "auto", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: "22px 20px calc(22px + env(safe-area-inset-bottom))" }} onClick={(e) => e.stopPropagation()}>
+        <h3 className="disp" style={{ margin: "0 0 14px" }}>{title}</h3>
+        {error && <div className="error-banner">{error}</div>}
+        <form onSubmit={handleSubmit}>
+          <div className="field">
+            <label>Texte en français</label>
+            <textarea
+              value={fr}
+              onChange={(e) => setFr(e.target.value)}
+              onBlur={handleFrBlur}
+              rows={3}
+              style={{ width: "100%", fontFamily: "inherit", fontSize: 14, padding: 10, borderRadius: 10, border: "1px solid var(--pink-input-border)", resize: "vertical" }}
+            />
+          </div>
+          <div className="field">
+            <label>Texte en hébreu {translating === "he" && "…"}</label>
+            <textarea
+              dir="rtl"
+              value={he}
+              onChange={(e) => setHe(e.target.value)}
+              onBlur={handleHeBlur}
+              rows={3}
+              style={{ width: "100%", fontFamily: "inherit", fontSize: 14, padding: 10, borderRadius: 10, border: "1px solid var(--pink-input-border)", resize: "vertical" }}
+            />
+          </div>
+          <button className="btn-primary" type="submit" disabled={saving || translating}>
+            {saving ? "…" : "Enregistrer"}
+          </button>
+        </form>
+        <button className="link-btn" onClick={onClose}>Annuler</button>
       </div>
     </div>
   );
