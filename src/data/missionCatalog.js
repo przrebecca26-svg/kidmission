@@ -5,6 +5,9 @@
  *
  * Each item is { id, fr, he, val } — val is always a positive number, the sign
  * or meaning (gain/cost) is applied by the tab it belongs to in ChildSettings.jsx.
+ *
+ * MALUS_CATALOG items also carry `severity`: "small" | "large".
+ * A joker can only cancel a "small" malus (enforced in firestore.js via transaction).
  */
 
 export const BONUS_CATALOG = [
@@ -46,28 +49,28 @@ export const BONUS_CATALOG = [
 ];
 
 export const MALUS_CATALOG = [
-  { id: "m1", fr: "Chaussure laissée au milieu", he: "נעל שנשארה באמצע הבית", val: 10 },
-  { id: "m2", fr: "Vêtement par terre", he: "בגד על הרצפה", val: 10 },
-  { id: "m3", fr: "Serviette par terre", he: "מגבת על הרצפה", val: 10 },
-  { id: "m4", fr: "Jouet non rangé", he: "צעצוע שלא סודר", val: 10 },
-  { id: "m5", fr: "Assiette ou verre abandonné", he: "צלחת או כוס שנשארו בחוץ", val: 10 },
-  { id: "m6", fr: "Affaires laissées dans le salon (par objet)", he: "חפצים שנשארו בסלון", val: 10 },
-  { id: "m7", fr: "Obligation de répéter 3 fois la même chose", he: "צריך להגיד לה 3 פעמים את אותו הדבר", val: 10 },
-  { id: "m8", fr: "Faire semblant de ne pas entendre", he: "להעמיד פנים שלא שומעת", val: 15 },
-  { id: "m9", fr: "Répondre impoliment", he: "לענות בחוצפה", val: 20 },
-  { id: "m10", fr: "Crier ou faire une crise", he: "לצעוק או לעשות סצנה", val: 20 },
-  { id: "m11", fr: "Négocier sans fin pour la douche", he: "להתווכח בלי סוף על המקלחת", val: 20 },
-  { id: "m12", fr: "Dire « j'arrive » et ne pas venir", he: "להגיד ״אני באה״ ולא לבוא", val: 10 },
-  { id: "m13", fr: "Oublier de tirer la chasse", he: "לשכוח להוריד מים בשירותים", val: 20 },
-  { id: "m14", fr: "Chambre en désordre total", he: "חדר מבולגן לגמרי", val: 30 },
-  { id: "m15", fr: "Refuser une tâche demandée", he: "לסרב לבצע משימה שהתבקשה", val: 30 },
-  { id: "m16", fr: "Ne pas faire ses devoirs", he: "לא להכין שיעורי בית", val: 30 },
-  { id: "m17", fr: "Mentir", he: "לשקר", val: 30 },
-  { id: "m18", fr: "Cacher une bêtise", he: "להסתיר מעשה לא טוב", val: 30 },
-  { id: "m19", fr: "Mot de la maîtresse ou note 0", he: "הערה מהמורה או ציון 0", val: 50 },
-  { id: "m20", fr: "Travail bâclé volontairement", he: "לעשות עבודה ברשלנות בכוונה", val: 30 },
-  { id: "m21", fr: "Mauvaise attitude à l'école", he: "התנהגות לא טובה בבית הספר", val: 50 },
-  { id: "m22", fr: "Taper ou être méchante avec quelqu'un", he: "להרביץ או להיות רעה למישהו", val: 50 },
+  { id: "m1", fr: "Chaussure laissée au milieu", he: "נעל שנשארה באמצע הבית", val: 10, severity: "small" },
+  { id: "m2", fr: "Vêtement par terre", he: "בגד על הרצפה", val: 10, severity: "small" },
+  { id: "m3", fr: "Serviette par terre", he: "מגבת על הרצפה", val: 10, severity: "small" },
+  { id: "m4", fr: "Jouet non rangé", he: "צעצוע שלא סודר", val: 10, severity: "small" },
+  { id: "m5", fr: "Assiette ou verre abandonné", he: "צלחת או כוס שנשארו בחוץ", val: 10, severity: "small" },
+  { id: "m6", fr: "Affaires laissées dans le salon (par objet)", he: "חפצים שנשארו בסלון", val: 10, severity: "small" },
+  { id: "m7", fr: "Obligation de répéter 3 fois la même chose", he: "צריך להגיד לה 3 פעמים את אותו הדבר", val: 10, severity: "small" },
+  { id: "m8", fr: "Faire semblant de ne pas entendre", he: "להעמיד פנים שלא שומעת", val: 15, severity: "small" },
+  { id: "m9", fr: "Répondre impoliment", he: "לענות בחוצפה", val: 20, severity: "small" },
+  { id: "m10", fr: "Crier ou faire une crise", he: "לצעוק או לעשות סצנה", val: 20, severity: "small" },
+  { id: "m11", fr: "Négocier sans fin pour la douche", he: "להתווכח בלי סוף על המקלחת", val: 20, severity: "small" },
+  { id: "m12", fr: "Dire « j'arrive » et ne pas venir", he: "להגיד ״אני באה״ ולא לבוא", val: 10, severity: "small" },
+  { id: "m13", fr: "Oublier de tirer la chasse", he: "לשכוח להוריד מים בשירותים", val: 20, severity: "small" },
+  { id: "m14", fr: "Chambre en désordre total", he: "חדר מבולגן לגמרי", val: 30, severity: "large" },
+  { id: "m15", fr: "Refuser une tâche demandée", he: "לסרב לבצע משימה שהתבקשה", val: 30, severity: "large" },
+  { id: "m16", fr: "Ne pas faire ses devoirs", he: "לא להכין שיעורי בית", val: 30, severity: "large" },
+  { id: "m17", fr: "Mentir", he: "לשקר", val: 30, severity: "large" },
+  { id: "m18", fr: "Cacher une bêtise", he: "להסתיר מעשה לא טוב", val: 30, severity: "large" },
+  { id: "m19", fr: "Mot de la maîtresse ou note 0", he: "הערה מהמורה או ציון 0", val: 50, severity: "large" },
+  { id: "m20", fr: "Travail bâclé volontairement", he: "לעשות עבודה ברשלנות בכוונה", val: 30, severity: "large" },
+  { id: "m21", fr: "Mauvaise attitude à l'école", he: "התנהגות לא טובה בבית הספר", val: 50, severity: "large" },
+  { id: "m22", fr: "Taper ou être méchante avec quelqu'un", he: "להרביץ או להיות רעה למישהו", val: 50, severity: "large" },
 ];
 
 export const WEEKLY_CATALOG = [
@@ -97,7 +100,7 @@ export const JOKER_EARN_CATALOG = [
 ];
 
 export const JOKER_USE_CATALOG = [
-  { id: "ju1", fr: "Annuler un petit malus", he: "ביטול קנס קטן", val: 1 },
+  { id: "ju1", fr: "Annuler un petit malus", he: "ביטול קנס קטן", val: 1, special: "cancelMalus" },
   { id: "ju2", fr: "Choisir le film du soir", he: "לבחור את הסרט של הערב", val: 1 },
   { id: "ju3", fr: "30 minutes de télévision ou téléphone supplémentaires", he: "30 דקות נוספות של טלוויזיה או טלפון", val: 1 },
   { id: "ju4", fr: "Choisir le repas du soir", he: "לבחור את ארוחת הערב", val: 2 },
