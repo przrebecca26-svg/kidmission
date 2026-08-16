@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   watchChildProfile, watchSettings, watchEntries, addEntry, approveEntry, rejectOrDeleteEntry, cancelEntry,
-  watchRewardClaims, claimReward, approveRewardClaim, rejectRewardClaim,
+  watchRewardClaims, claimReward, approveRewardClaim, rejectRewardClaim, useJokerOnMalus,
 } from "../services/firestore.js";
 import { logout } from "../services/auth.js";
 import { getItemLabel } from "../services/translate.js";
@@ -16,8 +16,6 @@ const REWARD_CATS = ["reward"];
 
 const LOCALES = { fr: "fr-FR", he: "he-IL", en: "en-GB", ru: "ru-RU" };
 
-// Petits libellés bilingues indépendants du fichier i18n.jsx
-// (pas besoin de toucher i18n.jsx pour ces correctifs)
 const TAB_LABELS = {
   bonus: { fr: "🎯 Bonus", he: "🎯 בונוסים", en: "🎯 Bonus", ru: "🎯 Бонусы" },
   malus: { fr: "⚠️ Malus", he: "⚠️ קנסות", en: "⚠️ Malus", ru: "⚠️ Штрафы" },
@@ -34,7 +32,38 @@ const CANCEL_CONFIRM = {
   ru: "Отменить эту запись? Баланс будет пересчитан.",
 };
 
-// ---------- Animations / feedback visuel ----------
+const NOT_ENOUGH_JOKERS = {
+  fr: "Tu n'as pas assez de jokers disponibles 🃏",
+  he: "אין לך מספיק ג'וקרים זמינים 🃏",
+  en: "You don't have enough jokers available 🃏",
+  ru: "У тебя недостаточно доступных джокеров 🃏",
+};
+
+const SEVERITY_BADGE = {
+  small: { fr: "🔹 Petit malus", he: "🔹 קנס קטן", en: "🔹 Small", ru: "🔹 Малый" },
+  large: { fr: "🔺 Gros malus", he: "🔺 קנס גדול", en: "🔺 Large", ru: "🔺 Крупный" },
+};
+
+const CANCEL_MALUS_MODAL_TITLE = {
+  fr: "Choisis le malus à annuler",
+  he: "בחרי איזה קנס לבטל",
+  en: "Choose the malus to cancel",
+  ru: "Выбери штраф для отмены",
+};
+
+const NO_ELIGIBLE_MALUS = {
+  fr: "Aucun petit malus disponible à annuler en ce moment.",
+  he: "אין כרגע קנס קטן זמין לביטול.",
+  en: "No small malus is currently available to cancel.",
+  ru: "Сейчас нет доступных малых штрафов для отмены.",
+};
+
+const USE_THIS_JOKER = {
+  fr: "Utiliser le joker ici",
+  he: "להשתמש בג'וקר כאן",
+  en: "Use joker here",
+  ru: "Использовать джокер здесь",
+};
 
 const FEEDBACK_TITLES = {
   bonus: { fr: "Bravo !", he: "כל הכבוד!", en: "Well done!", ru: "Молодец!" },
@@ -156,8 +185,6 @@ function useItemLabel(item, lang) {
   return label;
 }
 
-// Compte la série de missions positives consécutives les plus récentes
-// (bonus / hebdo / joker gagné), interrompue par un malus ou un joker dépensé.
 function computeStreak(confirmedEntries) {
   const sorted = [...confirmedEntries].sort(
     (a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)
@@ -228,8 +255,6 @@ function FeedbackOverlay({ feedback, lang, onDone }) {
   );
 }
 
-// Petit compteur animé : fait défiler les chiffres au lieu de sauter directement
-// à la nouvelle valeur, pour donner l'impression que l'argent/les jokers s'accumulent.
 function AnimatedNumber({ value }) {
   const [display, setDisplay] = useState(value);
   const prevRef = useRef(value);
@@ -269,9 +294,6 @@ function StreakBadge({ streak, lang }) {
   );
 }
 
-// Petite enveloppe en haut de l'écran — pour Maman : nombre de demandes de
-// Shyrel en attente de validation. Pour Shyrel : nombre de choses ajoutées
-// par Maman depuis la dernière fois qu'elle a ouvert l'onglet "Mes demandes".
 function EnvelopeButton({ count, onClick }) {
   return (
     <button
@@ -307,6 +329,7 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
   const [activeTab, setActiveTab] = useState("bonus");
   const [busyId, setBusyId] = useState(null);
   const [feedback, setFeedback] = useState(null);
+  const [jokerCancelPicker, setJokerCancelPicker] = useState(null);
   const prevEntriesRef = useRef(null);
   const [lastSeenMs, setLastSeenMs] = useState(0);
 
@@ -333,10 +356,6 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
   useEffect(() => watchEntries(familyId, childId, setEntries), [familyId, childId]);
   useEffect(() => watchRewardClaims(familyId, childId, setClaims), [familyId, childId]);
 
-  // Détecte, côté enfant, toute entrée confirmée qui vient d'apparaître ou d'être
-  // validée SANS que ce soit Shyrel elle-même qui l'ait déclenchée (donc ajoutée
-  // directement par Maman, ou sa propre demande qui vient d'être validée) — et
-  // rejoue l'animation correspondante (bonus/malus/joker) si l'app est ouverte.
   useEffect(() => {
     if (!entries) return;
     if (isParent) { prevEntriesRef.current = entries; return; }
@@ -345,7 +364,7 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
       const prevStatus = new Map(prev.map((e) => [e.id, e.status]));
       const newlyVisible = entries.find((e) => {
         if (e.status !== "confirmed") return false;
-        if (e.createdBy === uid) return false; // déjà vue au moment de sa propre déclaration
+        if (e.createdBy === uid) return false;
         const before = prevStatus.get(e.id);
         return before === undefined || before === "pending";
       });
@@ -385,7 +404,18 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
     return [...builtin, ...custom];
   }
 
+  const confirmedEntries = entries.filter((e) => e.status === "confirmed");
+  const moneyBalance = Math.max(0, confirmedEntries.filter((e) => e.unit === profile.currencyUnit).reduce((s, e) => s + e.amt, 0));
+  const jokerBalance = Math.max(0, confirmedEntries.filter((e) => e.unit === "🃏").reduce((s, e) => s + e.amt, 0));
+  const streak = computeStreak(confirmedEntries);
+
+  const eligibleSmallMalus = confirmedEntries.filter((e) => e.cat === "malus" && e.severity === "small");
+
   async function handleDeclare(item) {
+    if (item.cat === "jokerUse" && jokerBalance < item.val) {
+      window.alert(NOT_ENOUGH_JOKERS[lang] || NOT_ENOUGH_JOKERS.fr);
+      return;
+    }
     setBusyId(item.id);
     try {
       const unit = unitFor(item, profile.currencyUnit);
@@ -393,12 +423,33 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
       await addEntry(familyId, childId, {
         itemId: item.id, he: item.he, fr: item.fr,
         amt: signedAmt, unit, cat: item.cat, createdBy: uid, isParent,
+        severity: item.cat === "malus" ? (item.severity || null) : undefined,
       });
       const line = `${signedAmt > 0 ? "+" : ""}${signedAmt} ${unit}`;
       if (item.cat === "malus") setFeedback({ type: "malus", line });
       else if (item.cat === "jokerEarn") setFeedback({ type: "jokerEarn", line: `+${item.val} 🃏` });
       else if (item.cat === "jokerUse") setFeedback({ type: "jokerUse", line: `-${item.val} 🃏` });
       else setFeedback({ type: "bonus", line });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleUseJokerOnMalus(item, malusEntry) {
+    if (jokerBalance < item.val) {
+      window.alert(NOT_ENOUGH_JOKERS[lang] || NOT_ENOUGH_JOKERS.fr);
+      return;
+    }
+    setBusyId(item.id);
+    try {
+      await useJokerOnMalus(familyId, childId, {
+        malusEntryId: malusEntry.id, jokerItemId: item.id, jokerVal: item.val,
+        fr: item.fr, he: item.he, createdBy: uid, isParent,
+      });
+      setJokerCancelPicker(null);
+      setFeedback({ type: "jokerUse", line: `-${item.val} 🃏` });
+    } catch (err) {
+      window.alert(err.message || "Une erreur est survenue.");
     } finally {
       setBusyId(null);
     }
@@ -428,12 +479,17 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
     }
   }
 
-  // Le solde ne compte que les entrées "confirmed" — une entrée "cancelled"
-  // en sort automatiquement, pas besoin de logique supplémentaire ici.
-  const confirmedEntries = entries.filter((e) => e.status === "confirmed");
-  const moneyBalance = Math.max(0, confirmedEntries.filter((e) => e.unit === profile.currencyUnit).reduce((s, e) => s + e.amt, 0));
-  const jokerBalance = Math.max(0, confirmedEntries.filter((e) => e.unit === "🃏").reduce((s, e) => s + e.amt, 0));
-  const streak = computeStreak(confirmedEntries);
+  async function handleApproveEntry(entryId) {
+    setBusyId(entryId);
+    try {
+      await approveEntry(familyId, childId, entryId);
+    } catch (err) {
+      window.alert(err.message || "Une erreur est survenue.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   const pendingCount = isParent
     ? entries.filter((e) => e.status === "pending").length + claims.filter((c) => c.status === "pending").length
     : 0;
@@ -534,7 +590,17 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
           <MissionList items={itemsFor(JOKER_EARN_CATS)} currencyUnit={profile.currencyUnit} onAct={handleDeclare} busyId={busyId} isParent={isParent} lang={lang} t={t} />
         )}
         {activeTab === "jokerUse" && (
-          <MissionList items={itemsFor(JOKER_USE_CATS)} currencyUnit={profile.currencyUnit} onAct={handleDeclare} busyId={busyId} isParent={isParent} lang={lang} t={t} />
+          <JokerUseList
+            items={itemsFor(JOKER_USE_CATS)}
+            currencyUnit={profile.currencyUnit}
+            jokerBalance={jokerBalance}
+            onAct={handleDeclare}
+            onOpenCancelPicker={(item) => setJokerCancelPicker(item)}
+            busyId={busyId}
+            isParent={isParent}
+            lang={lang}
+            t={t}
+          />
         )}
         {activeTab === "rewards" && (
           <RewardList items={itemsFor(REWARD_CATS)} currencyUnit={profile.currencyUnit} onAct={handleClaim} busyId={busyId} isParent={isParent} lang={lang} t={t} />
@@ -542,7 +608,7 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
         {activeTab === "requests" && (
           <RequestList
             list={requestList} isParent={isParent} lang={lang} t={t} busyId={busyId}
-            onApproveEntry={(id) => approveEntry(familyId, childId, id)}
+            onApproveEntry={handleApproveEntry}
             onRejectEntry={(id) => rejectOrDeleteEntry(familyId, childId, id)}
             onApproveClaim={(id) => approveRewardClaim(familyId, childId, id)}
             onRejectClaim={(id) => rejectRewardClaim(familyId, childId, id)}
@@ -551,10 +617,31 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
         )}
       </div>
 
+      {jokerCancelPicker && (
+        <JokerCancelPickerModal
+          item={jokerCancelPicker}
+          eligibleMalus={eligibleSmallMalus}
+          lang={lang}
+          busyId={busyId}
+          onPick={(malusEntry) => handleUseJokerOnMalus(jokerCancelPicker, malusEntry)}
+          onClose={() => setJokerCancelPicker(null)}
+        />
+      )}
+
       <div style={{ padding: "20px 16px 0", textAlign: "center" }}>
         <button className="link-btn" onClick={logout}>{t("logout")}</button>
       </div>
     </div>
+  );
+}
+
+function SeverityBadge({ severity, lang }) {
+  if (!severity || !SEVERITY_BADGE[severity]) return null;
+  const labels = SEVERITY_BADGE[severity];
+  return (
+    <span style={{ fontSize: 10.5, fontWeight: 700, color: severity === "large" ? "var(--red)" : "var(--text-faint)" }}>
+      {labels[lang] || labels.fr}
+    </span>
   );
 }
 
@@ -566,8 +653,11 @@ function MissionRow({ item, currencyUnit, onAct, busyId, isParent, lang, t }) {
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 12, padding: "12px 14px", gap: 10 }}>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600 }}>{label}</div>
-        <div className="mono" style={{ fontSize: 12.5, fontWeight: 600, color: sign < 0 ? "var(--red)" : "var(--green)", marginTop: 2 }}>
-          {sign > 0 ? "+" : "-"}{item.val} {unit}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
+          <span className="mono" style={{ fontSize: 12.5, fontWeight: 600, color: sign < 0 ? "var(--red)" : "var(--green)" }}>
+            {sign > 0 ? "+" : "-"}{item.val} {unit}
+          </span>
+          {item.cat === "malus" && <SeverityBadge severity={item.severity} lang={lang} />}
         </div>
       </div>
       <button
@@ -590,6 +680,89 @@ function MissionList({ items, currencyUnit, onAct, busyId, isParent, lang, t }) 
       {items.map((item) => (
         <MissionRow key={item.id} item={item} currencyUnit={currencyUnit} onAct={onAct} busyId={busyId} isParent={isParent} lang={lang} t={t} />
       ))}
+    </div>
+  );
+}
+
+function JokerUseRow({ item, currencyUnit, jokerBalance, onAct, onOpenCancelPicker, busyId, isParent, lang, t }) {
+  const label = useItemLabel(item, lang);
+  const unit = unitFor(item, currencyUnit);
+  const insufficient = jokerBalance < item.val;
+  const isCancelMalus = item.special === "cancelMalus";
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 12, padding: "12px 14px", gap: 10 }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>{label}</div>
+        <div className="mono" style={{ fontSize: 12.5, fontWeight: 600, color: "var(--red)", marginTop: 2 }}>
+          -{item.val} {unit}
+          {insufficient && <span style={{ marginLeft: 8, color: "var(--text-faint)", fontWeight: 600 }}> · pas assez de jokers</span>}
+        </div>
+      </div>
+      <button
+        className="btn-primary" style={{ width: "auto", flex: "0 0 auto", padding: "8px 14px", fontSize: 13 }}
+        disabled={busyId === item.id || insufficient}
+        onClick={() => (isCancelMalus ? onOpenCancelPicker(item) : onAct(item))}
+      >
+        {busyId === item.id ? "…" : isParent ? t("save") : t("declare")}
+      </button>
+    </div>
+  );
+}
+
+function JokerUseList({ items, currencyUnit, jokerBalance, onAct, onOpenCancelPicker, busyId, isParent, lang, t }) {
+  if (items.length === 0) {
+    return <p style={{ color: "var(--text-faint)", textAlign: "center", padding: 20, fontSize: 14 }}>{t("noMissions")}</p>;
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {items.map((item) => (
+        <JokerUseRow
+          key={item.id} item={item} currencyUnit={currencyUnit} jokerBalance={jokerBalance}
+          onAct={onAct} onOpenCancelPicker={onOpenCancelPicker} busyId={busyId} isParent={isParent} lang={lang} t={t}
+        />
+      ))}
+    </div>
+  );
+}
+
+function JokerCancelPickerModal({ item, eligibleMalus, lang, busyId, onPick, onClose }) {
+  const title = CANCEL_MALUS_MODAL_TITLE[lang] || CANCEL_MALUS_MODAL_TITLE.fr;
+  const emptyMsg = NO_ELIGIBLE_MALUS[lang] || NO_ELIGIBLE_MALUS.fr;
+  const useLabel = USE_THIS_JOKER[lang] || USE_THIS_JOKER.fr;
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(91,32,58,0.55)", display: "flex", alignItems: "flex-end", zIndex: 60 }} onClick={onClose}>
+      <div style={{ background: "var(--pink-card)", width: "100%", maxHeight: "80vh", overflowY: "auto", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: "22px 20px calc(22px + env(safe-area-inset-bottom))" }} onClick={(e) => e.stopPropagation()}>
+        <h3 className="disp" style={{ margin: "0 0 14px" }}>{title}</h3>
+        {eligibleMalus.length === 0 ? (
+          <p style={{ color: "var(--text-faint)", fontSize: 13.5, textAlign: "center", padding: "20px 0" }}>{emptyMsg}</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+            {eligibleMalus.map((malus) => (
+              <EligibleMalusRow key={malus.id} malus={malus} lang={lang} busyId={busyId} useLabel={useLabel} onPick={() => onPick(malus)} />
+            ))}
+          </div>
+        )}
+        <button className="link-btn" onClick={onClose}>Annuler</button>
+      </div>
+    </div>
+  );
+}
+
+function EligibleMalusRow({ malus, lang, busyId, useLabel, onPick }) {
+  const label = useItemLabel(malus, lang);
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--pink-bg)", border: "1px solid var(--pink-border)", borderRadius: 12, padding: "12px 14px", gap: 10 }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 600 }}>{label}</div>
+        <div className="mono" style={{ fontSize: 12, color: "var(--red)", marginTop: 2 }}>{malus.amt} {malus.unit}</div>
+      </div>
+      <button
+        className="btn-primary" style={{ width: "auto", flex: "0 0 auto", padding: "8px 12px", fontSize: 12.5 }}
+        disabled={busyId === malus.id}
+        onClick={onPick}
+      >
+        {useLabel}
+      </button>
     </div>
   );
 }
@@ -635,6 +808,7 @@ function RequestRow({ req, isParent, lang, t, busyId, onApproveEntry, onRejectEn
   const isCancelled = req.status === "cancelled";
   const isPositive = req.kind === "claim" ? true : req.amt >= 0;
   const canCancel = isParent && req.kind === "entry" && req.status === "confirmed";
+  const isJokerMalusLink = req.kind === "entry" && !!req.linkedMalusId;
 
   let statusLabel;
   let statusColor;
@@ -653,7 +827,9 @@ function RequestRow({ req, isParent, lang, t, busyId, onApproveEntry, onRejectEn
     <div style={{ background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 12, padding: "12px 14px", opacity: isCancelled ? 0.6 : 1 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, textDecoration: isCancelled ? "line-through" : "none" }}>{label}</div>
+          <div style={{ fontSize: 14, fontWeight: 600, textDecoration: isCancelled ? "line-through" : "none" }}>
+            {label}{isJokerMalusLink ? " 🃏🔗" : ""}
+          </div>
           <div style={{ fontSize: 11.5, color: "var(--text-faint)", marginTop: 2 }}>{formatDate(req.createdAt, lang)}</div>
         </div>
         <span
