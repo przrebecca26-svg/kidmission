@@ -1,8 +1,31 @@
 import {
-  collection, doc, addDoc, updateDoc, deleteDoc, getDoc, setDoc,
+  collection, doc, addDoc, updateDoc, deleteDoc, getDoc, getDocs, setDoc,
   onSnapshot, query, orderBy, serverTimestamp, where, runTransaction,
 } from "firebase/firestore";
 import { db } from "../firebase.js";
+
+/* ------------------------------------------------------------------ */
+/* Families                                                            */
+/* ------------------------------------------------------------------ */
+
+export function watchFamily(familyId, callback) {
+  return onSnapshot(doc(db, "families", familyId), (snap) => {
+    callback(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+  });
+}
+
+/**
+ * Marks the family's onboarding tour as seen, so it never auto-triggers again.
+ * Deliberately does NOT gate manual replays via "❓ Découvrir KidMission" — those
+ * always work regardless of this flag (see OnboardingTour.jsx, which calls this
+ * on every successful mount, auto-triggered or manually replayed alike).
+ * Called only once the tour has actually rendered successfully, not before —
+ * so a crash right at trigger time can't leave this true without the parent
+ * ever having seen anything.
+ */
+export async function markOnboardingSeen(familyId) {
+  await setDoc(doc(db, "families", familyId), { onboardingSeen: true }, { merge: true });
+}
 
 /* ------------------------------------------------------------------ */
 /* Children (permanent profiles)                                      */
@@ -88,16 +111,43 @@ export async function addEntry(familyId, childId, { itemId, he, fr, amt, unit, c
 }
 
 /**
- * Approves a pending entry. If the entry is a joker-cancel-malus request
- * (carries linkedMalusId), approving it is what actually cancels the target
- * malus — via a transaction that re-checks eligibility at approval time, so a
- * malus can never end up cancelled twice even if two requests targeted it.
+ * Sums confirmed 🃏 entries for a child — used to double-check, at approval time,
+ * that Shyrel actually still has enough jokers for the request being approved.
+ */
+async function getConfirmedJokerBalance(familyId, childId) {
+  const entriesCol = collection(db, `families/${familyId}/children/${childId}/entries`);
+  const q = query(entriesCol, where("status", "==", "confirmed"), where("unit", "==", "🃏"));
+  const snap = await getDocs(q);
+  return snap.docs.reduce((sum, d) => sum + (d.data().amt || 0), 0);
+}
+
+/**
+ * Approves a pending entry.
+ *
+ * For any jokerUse entry (whether it's a plain joker spend or one linked to a
+ * malus cancellation), Maman's approval is checked against the CURRENT real
+ * joker balance right before confirming. If approving this one would push the
+ * balance below zero, this throws instead of confirming — Maman should reject
+ * it instead.
+ *
+ * If the entry is a joker-cancel-malus request (carries linkedMalusId),
+ * approving it is what actually cancels the target malus — via a transaction
+ * that re-checks eligibility at approval time, so a malus can never end up
+ * cancelled twice even if two requests targeted it.
  */
 export async function approveEntry(familyId, childId, entryId) {
   const entryRef = doc(db, `families/${familyId}/children/${childId}/entries`, entryId);
   const snap = await getDoc(entryRef);
   if (!snap.exists()) return;
   const entry = snap.data();
+
+  if (entry.cat === "jokerUse") {
+    const jokerBalance = await getConfirmedJokerBalance(familyId, childId);
+    if (jokerBalance + entry.amt < 0) {
+      throw new Error("Le solde de jokers ne suffit plus pour valider cette demande (probablement à cause d'une autre demande déjà validée entre-temps) — refuse-la plutôt.");
+    }
+  }
+
   if (entry.linkedMalusId) {
     await approveLinkedMalusCancel(familyId, childId, entryId, entry.linkedMalusId);
     return;
@@ -112,10 +162,9 @@ export async function rejectOrDeleteEntry(familyId, childId, entryId) {
 /**
  * Cancels an already-confirmed bonus/malus entry. Unlike rejectOrDeleteEntry
  * (which removes a still-pending request), this KEEPS the entry as a visible
- * trace ("❌ Annulé") instead of deleting it — Maman asked to be able to see
- * that something was cancelled and by whom/when, not have it silently vanish.
- * Cancelled entries are automatically excluded from the balance calculation
- * in ChildHome.jsx, since only status === "confirmed" entries are summed.
+ * trace ("❌ Annulé") instead of deleting it. Cancelled entries are automatically
+ * excluded from the balance calculation in ChildHome.jsx, since only
+ * status === "confirmed" entries are summed.
  *
  * This is Maman's manual override tool and is intentionally left untouched —
  * it is a separate mechanism from the joker/malus linking below, on purpose.
@@ -132,28 +181,6 @@ export async function cancelEntry(familyId, childId, entryId, cancelledBy) {
 /* Joker → malus cancellation (linked, transaction-safe)              */
 /* ------------------------------------------------------------------ */
 
-/**
- * Attempts to use a joker to cancel a specific malus entry.
- * Runs as a Firestore transaction so the eligibility check (malus still
- * confirmed, severity exactly "small") and the write happen atomically —
- * a malus can never be cancelled twice, even with a double-tap or two
- * devices acting at once.
- *
- * Eligibility is a WHITELIST: only severity === "small" is allowed. Anything
- * else — "large", or no severity set at all (e.g. an older malus entry from
- * before this feature existed, or a custom malus someone forgot to tag) — is
- * refused. This is deliberately the safer default.
- *
- * - If isParent (Maman is acting directly): the malus is cancelled immediately
- *   and the joker-spend entry is created already "confirmed".
- * - If !isParent (Shyrel is requesting): the malus is NOT touched yet — only a
- *   "pending" joker-spend entry (carrying linkedMalusId) is created. The malus
- *   only actually gets cancelled when Maman approves that request via
- *   approveEntry, which re-runs this same eligibility check at that time.
- *
- * Throws an Error with a user-facing French message if the malus is no longer
- * eligible (already cancelled, too severe/undefined, or gone).
- */
 export async function useJokerOnMalus(familyId, childId, { malusEntryId, jokerItemId, jokerVal, fr, he, createdBy, isParent }) {
   const malusRef = doc(db, `families/${familyId}/children/${childId}/entries`, malusEntryId);
   const entriesCol = collection(db, `families/${familyId}/children/${childId}/entries`);
