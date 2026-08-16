@@ -87,6 +87,22 @@ export async function rejectOrDeleteEntry(familyId, childId, entryId) {
   await deleteDoc(doc(db, `families/${familyId}/children/${childId}/entries`, entryId));
 }
 
+/**
+ * Cancels an already-confirmed bonus/malus entry. Unlike rejectOrDeleteEntry
+ * (which removes a still-pending request), this KEEPS the entry as a visible
+ * trace ("❌ Annulé") instead of deleting it — Maman asked to be able to see
+ * that something was cancelled and by whom/when, not have it silently vanish.
+ * Cancelled entries are automatically excluded from the balance calculation
+ * in ChildHome.jsx, since only status === "confirmed" entries are summed.
+ */
+export async function cancelEntry(familyId, childId, entryId, cancelledBy) {
+  await updateDoc(doc(db, `families/${familyId}/children/${childId}/entries`, entryId), {
+    status: "cancelled",
+    cancelledBy,
+    cancelledAt: serverTimestamp(),
+  });
+}
+
 /* ------------------------------------------------------------------ */
 /* Payments (Versements) — one document per month, Maman only         */
 /* ------------------------------------------------------------------ */
