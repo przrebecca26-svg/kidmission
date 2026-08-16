@@ -42,7 +42,6 @@ const FEEDBACK_TITLES = {
   jokerEarn: { fr: "Joker gagné !", he: "ג'וקר הורווח!", en: "Joker earned!", ru: "Джокер получен!" },
   jokerUse: { fr: "Joker utilisé !", he: "ג'וקר נוצל!", en: "Joker used!", ru: "Джокер использован!" },
   reward: { fr: "Nouvelle récompense !", he: "פרס חדש!", en: "New reward!", ru: "Новая награда!" },
-  missionValidated: { fr: "Mission validée !", he: "המשימה אושרה!", en: "Mission approved!", ru: "Задание подтверждено!" },
 };
 
 const FEEDBACK_EMOJI = {
@@ -51,8 +50,14 @@ const FEEDBACK_EMOJI = {
   jokerEarn: "🃏",
   jokerUse: "🃏",
   reward: "🏆",
-  missionValidated: "✅",
 };
+
+function feedbackTypeForCat(cat) {
+  if (cat === "malus") return "malus";
+  if (cat === "jokerEarn") return "jokerEarn";
+  if (cat === "jokerUse") return "jokerUse";
+  return "bonus";
+}
 
 const STREAK_LABEL = {
   fr: (n) => `🔥 Série de ${n} missions !`,
@@ -264,6 +269,35 @@ function StreakBadge({ streak, lang }) {
   );
 }
 
+// Petite enveloppe en haut de l'écran — pour Maman : nombre de demandes de
+// Shyrel en attente de validation. Pour Shyrel : nombre de choses ajoutées
+// par Maman depuis la dernière fois qu'elle a ouvert l'onglet "Mes demandes".
+function EnvelopeButton({ count, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        position: "relative", background: "rgba(255,255,255,0.18)", border: "none", borderRadius: 999,
+        width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center",
+        cursor: "pointer", fontSize: 16, padding: 0,
+      }}
+    >
+      ✉️
+      {count > 0 && (
+        <span
+          style={{
+            position: "absolute", top: -4, right: -4, background: "var(--red)", color: "#fff",
+            borderRadius: 999, minWidth: 16, height: 16, fontSize: 10, fontWeight: 700,
+            display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px",
+          }}
+        >
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
 export default function ChildHome({ familyId, childId, uid, isParent, onBack }) {
   const { lang, setLang, t, dir } = useLang();
   const [profile, setProfile] = useState(undefined);
@@ -274,6 +308,21 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
   const [busyId, setBusyId] = useState(null);
   const [feedback, setFeedback] = useState(null);
   const prevEntriesRef = useRef(null);
+  const [lastSeenMs, setLastSeenMs] = useState(0);
+
+  useEffect(() => {
+    try {
+      setLastSeenMs(Number(localStorage.getItem(`kidmission_lastSeen_${childId}`)) || 0);
+    } catch {
+      setLastSeenMs(0);
+    }
+  }, [childId]);
+
+  function markSeen() {
+    const now = Date.now();
+    try { localStorage.setItem(`kidmission_lastSeen_${childId}`, String(now)); } catch {}
+    setLastSeenMs(now);
+  }
 
   useEffect(() => watchChildProfile(familyId, childId, setProfile), [familyId, childId]);
   useEffect(() => {
@@ -284,20 +333,26 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
   useEffect(() => watchEntries(familyId, childId, setEntries), [familyId, childId]);
   useEffect(() => watchRewardClaims(familyId, childId, setClaims), [familyId, childId]);
 
-  // Détecte, côté enfant, le moment où Maman valide une demande pendant que
-  // l'app est ouverte — déclenche une petite animation "Mission validée !".
+  // Détecte, côté enfant, toute entrée confirmée qui vient d'apparaître ou d'être
+  // validée SANS que ce soit Shyrel elle-même qui l'ait déclenchée (donc ajoutée
+  // directement par Maman, ou sa propre demande qui vient d'être validée) — et
+  // rejoue l'animation correspondante (bonus/malus/joker) si l'app est ouverte.
   useEffect(() => {
     if (!entries) return;
     if (isParent) { prevEntriesRef.current = entries; return; }
     const prev = prevEntriesRef.current;
     if (prev) {
       const prevStatus = new Map(prev.map((e) => [e.id, e.status]));
-      const justConfirmed = entries.find(
-        (e) => e.createdBy === uid && prevStatus.get(e.id) === "pending" && e.status === "confirmed"
-      );
-      if (justConfirmed) {
-        const line = `${justConfirmed.amt > 0 ? "+" : ""}${justConfirmed.amt} ${justConfirmed.unit || ""}`;
-        setFeedback({ type: "missionValidated", line });
+      const newlyVisible = entries.find((e) => {
+        if (e.status !== "confirmed") return false;
+        if (e.createdBy === uid) return false; // déjà vue au moment de sa propre déclaration
+        const before = prevStatus.get(e.id);
+        return before === undefined || before === "pending";
+      });
+      if (newlyVisible) {
+        const type = feedbackTypeForCat(newlyVisible.cat);
+        const line = `${newlyVisible.amt > 0 ? "+" : ""}${newlyVisible.amt} ${newlyVisible.unit || ""}`;
+        setFeedback({ type, line });
       }
     }
     prevEntriesRef.current = entries;
@@ -382,6 +437,12 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
   const pendingCount = isParent
     ? entries.filter((e) => e.status === "pending").length + claims.filter((c) => c.status === "pending").length
     : 0;
+  const unseenCount = !isParent
+    ? entries.filter(
+        (e) => e.status === "confirmed" && e.createdBy !== uid && (e.createdAt?.toMillis?.() || 0) > lastSeenMs
+      ).length
+    : 0;
+  const envelopeCount = isParent ? pendingCount : unseenCount;
 
   const requestList = [
     ...entries.map((e) => ({ ...e, kind: "entry" })),
@@ -409,7 +470,16 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
               {t("back")}
             </button>
           ) : <span />}
-          <LanguageSwitcher lang={lang} setLang={setLang} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <EnvelopeButton
+              count={envelopeCount}
+              onClick={() => {
+                setActiveTab("requests");
+                if (!isParent) markSeen();
+              }}
+            />
+            <LanguageSwitcher lang={lang} setLang={setLang} />
+          </div>
         </div>
         <h1 className="disp" style={{ fontSize: 22, margin: "0 0 10px" }}>🧒 {profile.displayName}</h1>
         <div style={{ display: "flex", gap: 8 }}>
@@ -430,7 +500,10 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
           {tabs.map((tab) => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => {
+                setActiveTab(tab.key);
+                if (tab.key === "requests" && !isParent) markSeen();
+              }}
               style={{
                 flex: "0 0 auto", padding: "8px 14px", borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap",
                 border: activeTab === tab.key ? "2px solid var(--pink-header)" : "1px solid var(--pink-input-border)",
