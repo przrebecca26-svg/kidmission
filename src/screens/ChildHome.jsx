@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   watchChildProfile, watchSettings, watchEntries, addEntry, approveEntry, rejectOrDeleteEntry, cancelEntry,
   watchRewardClaims, claimReward, approveRewardClaim, rejectRewardClaim,
@@ -34,6 +34,94 @@ const CANCEL_CONFIRM = {
   ru: "Отменить эту запись? Баланс будет пересчитан.",
 };
 
+// ---------- Animations / feedback visuel ----------
+
+const FEEDBACK_TITLES = {
+  bonus: { fr: "Bravo !", he: "כל הכבוד!", en: "Well done!", ru: "Молодец!" },
+  malus: { fr: "Oups…", he: "אופס…", en: "Oops…", ru: "Ой…" },
+  jokerEarn: { fr: "Joker gagné !", he: "ג'וקר הורווח!", en: "Joker earned!", ru: "Джокер получен!" },
+  jokerUse: { fr: "Joker utilisé !", he: "ג'וקר נוצל!", en: "Joker used!", ru: "Джокер использован!" },
+  reward: { fr: "Nouvelle récompense !", he: "פרס חדש!", en: "New reward!", ru: "Новая награда!" },
+  missionValidated: { fr: "Mission validée !", he: "המשימה אושרה!", en: "Mission approved!", ru: "Задание подтверждено!" },
+};
+
+const FEEDBACK_EMOJI = {
+  bonus: "🎉",
+  malus: "😕",
+  jokerEarn: "🃏",
+  jokerUse: "🃏",
+  reward: "🏆",
+  missionValidated: "✅",
+};
+
+const STREAK_LABEL = {
+  fr: (n) => `🔥 Série de ${n} missions !`,
+  he: (n) => `🔥 רצף של ${n} משימות!`,
+  en: (n) => `🔥 ${n}-mission streak!`,
+  ru: (n) => `🔥 Серия из ${n} заданий!`,
+};
+
+const ANIM_STYLES = `
+@keyframes kmConfettiFall {
+  0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(110vh) rotate(360deg); opacity: 0.9; }
+}
+@keyframes kmPopIn {
+  0% { transform: scale(0.4); opacity: 0; }
+  60% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes kmShake {
+  0% { transform: translateX(0) scale(1); }
+  20% { transform: translateX(-6px) scale(1); }
+  40% { transform: translateX(6px) scale(1); }
+  60% { transform: translateX(-4px) scale(1); }
+  80% { transform: translateX(4px) scale(1); }
+  100% { transform: translateX(0) scale(1); }
+}
+@keyframes kmFadeShrink {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.55); opacity: 0; }
+}
+.km-confetti {
+  position: absolute;
+  top: -10px;
+  width: 8px;
+  height: 14px;
+  border-radius: 2px;
+  animation-name: kmConfettiFall;
+  animation-timing-function: ease-in;
+  animation-fill-mode: forwards;
+}
+.km-feedback-card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 22px 30px;
+  text-align: center;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--pink-header, #d6317c);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+  animation: kmPopIn 0.35s ease-out;
+  max-width: 78vw;
+}
+.km-feedback-card.km-sad {
+  color: #8a5a5a;
+  animation: kmShake 0.4s ease;
+}
+.km-feedback-card.km-fadeaway {
+  animation: kmFadeShrink 0.9s ease forwards;
+  animation-delay: 0.5s;
+}
+.km-feedback-emoji {
+  font-size: 44px;
+  display: block;
+  margin-bottom: 6px;
+}
+`;
+
+const CONFETTI_COLORS = ["#d6317c", "#ffb703", "#5c8c5a", "#4c9fd6", "#f4a6c6"];
+
 function signFor(cat) {
   return cat === "malus" || cat === "jokerUse" ? -1 : 1;
 }
@@ -63,6 +151,119 @@ function useItemLabel(item, lang) {
   return label;
 }
 
+// Compte la série de missions positives consécutives les plus récentes
+// (bonus / hebdo / joker gagné), interrompue par un malus ou un joker dépensé.
+function computeStreak(confirmedEntries) {
+  const sorted = [...confirmedEntries].sort(
+    (a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)
+  );
+  let count = 0;
+  for (const e of sorted) {
+    if (e.cat === "bonus" || e.cat === "weekly" || e.cat === "jokerEarn") {
+      count++;
+    } else {
+      break;
+    }
+  }
+  return count;
+}
+
+function ConfettiPiece({ index }) {
+  const left = Math.random() * 100;
+  const duration = 0.9 + Math.random() * 0.7;
+  const delay = Math.random() * 0.3;
+  const color = CONFETTI_COLORS[index % CONFETTI_COLORS.length];
+  return (
+    <span
+      className="km-confetti"
+      style={{
+        left: `${left}%`,
+        background: color,
+        animationDuration: `${duration}s`,
+        animationDelay: `${delay}s`,
+      }}
+    />
+  );
+}
+
+function FeedbackCard({ feedback, lang }) {
+  const titles = FEEDBACK_TITLES[feedback.type];
+  const title = titles[lang] || titles.fr;
+  const emoji = FEEDBACK_EMOJI[feedback.type];
+  const isSad = feedback.type === "malus";
+  const isFadeaway = feedback.type === "jokerUse";
+  return (
+    <div className={`km-feedback-card${isSad ? " km-sad" : ""}${isFadeaway ? " km-fadeaway" : ""}`}>
+      <span className="km-feedback-emoji">{emoji}</span>
+      {title}
+      {feedback.line && (
+        <div className="mono" style={{ marginTop: 6, fontSize: 22 }}>{feedback.line}</div>
+      )}
+    </div>
+  );
+}
+
+function FeedbackOverlay({ feedback, lang, onDone }) {
+  useEffect(() => {
+    if (!feedback) return;
+    const duration = feedback.type === "malus" ? 1300 : feedback.type === "jokerUse" ? 1500 : 1700;
+    const timer = setTimeout(onDone, duration);
+    return () => clearTimeout(timer);
+  }, [feedback]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!feedback) return null;
+
+  const showConfetti = feedback.type === "bonus" || feedback.type === "jokerEarn" || feedback.type === "reward";
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none", overflow: "hidden" }}>
+      {showConfetti && Array.from({ length: 26 }).map((_, i) => <ConfettiPiece key={i} index={i} />)}
+      <FeedbackCard feedback={feedback} lang={lang} />
+    </div>
+  );
+}
+
+// Petit compteur animé : fait défiler les chiffres au lieu de sauter directement
+// à la nouvelle valeur, pour donner l'impression que l'argent/les jokers s'accumulent.
+function AnimatedNumber({ value }) {
+  const [display, setDisplay] = useState(value);
+  const prevRef = useRef(value);
+
+  useEffect(() => {
+    const start = prevRef.current;
+    const end = value;
+    if (start === end) return;
+    const duration = 500;
+    const startTime = performance.now();
+    let raf;
+    function step(now) {
+      const progress = Math.min(1, (now - startTime) / duration);
+      const eased = 1 - Math.pow(1 - progress, 2);
+      const current = Math.round(start + (end - start) * eased);
+      setDisplay(current);
+      if (progress < 1) {
+        raf = requestAnimationFrame(step);
+      } else {
+        prevRef.current = end;
+      }
+    }
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+
+  return display;
+}
+
+function StreakBadge({ streak, lang }) {
+  if (streak < 3) return null;
+  const labelFn = STREAK_LABEL[lang] || STREAK_LABEL.fr;
+  return (
+    <div style={{ marginTop: 8, display: "inline-block", background: "rgba(255,255,255,0.22)", borderRadius: 999, padding: "5px 12px", fontSize: 12.5, fontWeight: 700, color: "#fff" }}>
+      {labelFn(streak)}
+    </div>
+  );
+}
+
 export default function ChildHome({ familyId, childId, uid, isParent, onBack }) {
   const { lang, setLang, t, dir } = useLang();
   const [profile, setProfile] = useState(undefined);
@@ -71,6 +272,8 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
   const [claims, setClaims] = useState(undefined);
   const [activeTab, setActiveTab] = useState("bonus");
   const [busyId, setBusyId] = useState(null);
+  const [feedback, setFeedback] = useState(null);
+  const prevEntriesRef = useRef(null);
 
   useEffect(() => watchChildProfile(familyId, childId, setProfile), [familyId, childId]);
   useEffect(() => {
@@ -80,6 +283,25 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
   }, [familyId, childId]);
   useEffect(() => watchEntries(familyId, childId, setEntries), [familyId, childId]);
   useEffect(() => watchRewardClaims(familyId, childId, setClaims), [familyId, childId]);
+
+  // Détecte, côté enfant, le moment où Maman valide une demande pendant que
+  // l'app est ouverte — déclenche une petite animation "Mission validée !".
+  useEffect(() => {
+    if (!entries) return;
+    if (isParent) { prevEntriesRef.current = entries; return; }
+    const prev = prevEntriesRef.current;
+    if (prev) {
+      const prevStatus = new Map(prev.map((e) => [e.id, e.status]));
+      const justConfirmed = entries.find(
+        (e) => e.createdBy === uid && prevStatus.get(e.id) === "pending" && e.status === "confirmed"
+      );
+      if (justConfirmed) {
+        const line = `${justConfirmed.amt > 0 ? "+" : ""}${justConfirmed.amt} ${justConfirmed.unit || ""}`;
+        setFeedback({ type: "missionValidated", line });
+      }
+    }
+    prevEntriesRef.current = entries;
+  }, [entries, isParent, uid]);
 
   if (profile === undefined || settings === undefined || entries === undefined || claims === undefined) {
     return (
@@ -111,11 +333,17 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
   async function handleDeclare(item) {
     setBusyId(item.id);
     try {
+      const unit = unitFor(item, profile.currencyUnit);
+      const signedAmt = signFor(item.cat) * item.val;
       await addEntry(familyId, childId, {
         itemId: item.id, he: item.he, fr: item.fr,
-        amt: signFor(item.cat) * item.val, unit: unitFor(item, profile.currencyUnit),
-        cat: item.cat, createdBy: uid, isParent,
+        amt: signedAmt, unit, cat: item.cat, createdBy: uid, isParent,
       });
+      const line = `${signedAmt > 0 ? "+" : ""}${signedAmt} ${unit}`;
+      if (item.cat === "malus") setFeedback({ type: "malus", line });
+      else if (item.cat === "jokerEarn") setFeedback({ type: "jokerEarn", line: `+${item.val} 🃏` });
+      else if (item.cat === "jokerUse") setFeedback({ type: "jokerUse", line: `-${item.val} 🃏` });
+      else setFeedback({ type: "bonus", line });
     } finally {
       setBusyId(null);
     }
@@ -128,6 +356,7 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
         rewardId: item.id, periodKey: currentPeriodKey(), he: item.he, fr: item.fr,
         threshold: item.val, createdBy: uid, isParent,
       });
+      setFeedback({ type: "reward", line: null });
     } finally {
       setBusyId(null);
     }
@@ -149,6 +378,10 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
   const confirmedEntries = entries.filter((e) => e.status === "confirmed");
   const moneyBalance = Math.max(0, confirmedEntries.filter((e) => e.unit === profile.currencyUnit).reduce((s, e) => s + e.amt, 0));
   const jokerBalance = Math.max(0, confirmedEntries.filter((e) => e.unit === "🃏").reduce((s, e) => s + e.amt, 0));
+  const streak = computeStreak(confirmedEntries);
+  const pendingCount = isParent
+    ? entries.filter((e) => e.status === "pending").length + claims.filter((c) => c.status === "pending").length
+    : 0;
 
   const requestList = [
     ...entries.map((e) => ({ ...e, kind: "entry" })),
@@ -166,6 +399,9 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
 
   return (
     <div dir={dir} style={{ minHeight: "100vh", background: "var(--pink-bg)", paddingBottom: 40 }}>
+      <style>{ANIM_STYLES}</style>
+      <FeedbackOverlay feedback={feedback} lang={lang} onDone={() => setFeedback(null)} />
+
       <div style={{ background: "var(--pink-header)", color: "#fff", padding: "calc(20px + env(safe-area-inset-top)) 20px 18px", borderBottomLeftRadius: 20, borderBottomRightRadius: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           {onBack ? (
@@ -178,11 +414,14 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
         <h1 className="disp" style={{ fontSize: 22, margin: "0 0 10px" }}>🧒 {profile.displayName}</h1>
         <div style={{ display: "flex", gap: 8 }}>
           <span style={{ background: "rgba(255,255,255,0.18)", borderRadius: 999, padding: "6px 12px", fontSize: 13, fontWeight: 700 }} className="mono">
-            {moneyBalance} {profile.currencyUnit}
+            <AnimatedNumber value={moneyBalance} /> {profile.currencyUnit}
           </span>
           <span style={{ background: "rgba(255,255,255,0.18)", borderRadius: 999, padding: "6px 12px", fontSize: 13, fontWeight: 700 }} className="mono">
-            🃏 {jokerBalance}
+            🃏 <AnimatedNumber value={jokerBalance} />
           </span>
+        </div>
+        <div>
+          <StreakBadge streak={streak} lang={lang} />
         </div>
       </div>
 
@@ -197,9 +436,15 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
                 border: activeTab === tab.key ? "2px solid var(--pink-header)" : "1px solid var(--pink-input-border)",
                 background: activeTab === tab.key ? "rgba(214,49,124,0.08)" : "var(--pink-card)",
                 color: "var(--text-main)",
+                display: "flex", alignItems: "center", gap: 6,
               }}
             >
               {tab.label}
+              {tab.key === "requests" && pendingCount > 0 && (
+                <span style={{ background: "var(--red)", color: "#fff", borderRadius: 999, padding: "1px 6px", fontSize: 11, fontWeight: 700 }}>
+                  {pendingCount}
+                </span>
+              )}
             </button>
           ))}
         </div>
