@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  watchChildProfile, watchSettings, watchEntries, addEntry, approveEntry, rejectOrDeleteEntry,
+  watchChildProfile, watchSettings, watchEntries, addEntry, approveEntry, rejectOrDeleteEntry, cancelEntry,
   watchRewardClaims, claimReward, approveRewardClaim, rejectRewardClaim,
 } from "../services/firestore.js";
 import { logout } from "../services/auth.js";
@@ -16,13 +16,22 @@ const REWARD_CATS = ["reward"];
 
 const LOCALES = { fr: "fr-FR", he: "he-IL", en: "en-GB", ru: "ru-RU" };
 
-// Petits libellés d'onglets bilingues, indépendants du fichier i18n.jsx
-// (pas besoin de toucher i18n.jsx pour ce correctif)
+// Petits libellés bilingues indépendants du fichier i18n.jsx
+// (pas besoin de toucher i18n.jsx pour ces correctifs)
 const TAB_LABELS = {
   bonus: { fr: "🎯 Bonus", he: "🎯 בונוסים", en: "🎯 Bonus", ru: "🎯 Бонусы" },
   malus: { fr: "⚠️ Malus", he: "⚠️ קנסות", en: "⚠️ Malus", ru: "⚠️ Штрафы" },
   jokerEarn: { fr: "🃏 Jokers gagnés", he: "🃏 ג'וקרים שהורווחו", en: "🃏 Jokers earned", ru: "🃏 Заработанные джокеры" },
   jokerUse: { fr: "🃏 Jokers à dépenser", he: "🃏 ג'וקרים לשימוש", en: "🃏 Jokers to spend", ru: "🃏 Джокеры на использование" },
+};
+
+const CANCELLED_LABEL = { fr: "❌ Annulé", he: "❌ בוטל", en: "❌ Cancelled", ru: "❌ Отменено" };
+const CANCEL_BUTTON_LABEL = { fr: "Annuler", he: "לבטל", en: "Cancel", ru: "Отменить" };
+const CANCEL_CONFIRM = {
+  fr: "Annuler cette entrée ? Le solde sera recalculé.",
+  he: "לבטל את הרשומה הזו? היתרה תעודכן.",
+  en: "Cancel this entry? The balance will be recalculated.",
+  ru: "Отменить эту запись? Баланс будет пересчитан.",
 };
 
 function signFor(cat) {
@@ -124,6 +133,19 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
     }
   }
 
+  async function handleCancelEntry(entryId) {
+    const msg = CANCEL_CONFIRM[lang] || CANCEL_CONFIRM.fr;
+    if (!window.confirm(msg)) return;
+    setBusyId(entryId);
+    try {
+      await cancelEntry(familyId, childId, entryId, uid);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  // Le solde ne compte que les entrées "confirmed" — une entrée "cancelled"
+  // en sort automatiquement, pas besoin de logique supplémentaire ici.
   const confirmedEntries = entries.filter((e) => e.status === "confirmed");
   const moneyBalance = Math.max(0, confirmedEntries.filter((e) => e.unit === profile.currencyUnit).reduce((s, e) => s + e.amt, 0));
   const jokerBalance = Math.max(0, confirmedEntries.filter((e) => e.unit === "🃏").reduce((s, e) => s + e.amt, 0));
@@ -201,11 +223,12 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
         )}
         {activeTab === "requests" && (
           <RequestList
-            list={requestList} isParent={isParent} lang={lang} t={t}
+            list={requestList} isParent={isParent} lang={lang} t={t} busyId={busyId}
             onApproveEntry={(id) => approveEntry(familyId, childId, id)}
             onRejectEntry={(id) => rejectOrDeleteEntry(familyId, childId, id)}
             onApproveClaim={(id) => approveRewardClaim(familyId, childId, id)}
             onRejectClaim={(id) => rejectRewardClaim(familyId, childId, id)}
+            onCancelEntry={handleCancelEntry}
           />
         )}
       </div>
@@ -288,50 +311,77 @@ function RewardList({ items, currencyUnit, onAct, busyId, isParent, lang, t }) {
   );
 }
 
-function RequestRow({ req, isParent, lang, t, onApproveEntry, onRejectEntry, onApproveClaim, onRejectClaim }) {
+function RequestRow({ req, isParent, lang, t, busyId, onApproveEntry, onRejectEntry, onApproveClaim, onRejectClaim, onCancelEntry }) {
   const label = useItemLabel(req, lang);
   const isPending = req.status === "pending";
+  const isCancelled = req.status === "cancelled";
   const isPositive = req.kind === "claim" ? true : req.amt >= 0;
+  const canCancel = isParent && req.kind === "entry" && req.status === "confirmed";
+
+  let statusLabel;
+  let statusColor;
+  if (isCancelled) {
+    statusLabel = CANCELLED_LABEL[lang] || CANCELLED_LABEL.fr;
+    statusColor = "var(--red)";
+  } else if (isPending) {
+    statusLabel = t("pending");
+    statusColor = "var(--text-muted)";
+  } else {
+    statusLabel = t("confirmed");
+    statusColor = "var(--green)";
+  }
+
   return (
-    <div style={{ background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 12, padding: "12px 14px" }}>
+    <div style={{ background: "var(--pink-card)", border: "1px solid var(--pink-border)", borderRadius: 12, padding: "12px 14px", opacity: isCancelled ? 0.6 : 1 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>{label}</div>
+          <div style={{ fontSize: 14, fontWeight: 600, textDecoration: isCancelled ? "line-through" : "none" }}>{label}</div>
           <div style={{ fontSize: 11.5, color: "var(--text-faint)", marginTop: 2 }}>{formatDate(req.createdAt, lang)}</div>
         </div>
         <span
           className="mono"
-          style={{ fontSize: 13.5, fontWeight: 700, color: isPositive ? "var(--green)" : "var(--red)", flex: "0 0 auto" }}
+          style={{ fontSize: 13.5, fontWeight: 700, color: isCancelled ? "var(--text-faint)" : isPositive ? "var(--green)" : "var(--red)", flex: "0 0 auto" }}
         >
           {req.kind === "claim" ? `≥ ${req.threshold}` : `${req.amt > 0 ? "+" : ""}${req.amt}`} {req.unit || ""}
         </span>
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: isPending ? "var(--text-muted)" : "var(--green)" }}>
-          {isPending ? t("pending") : t("confirmed")}
+        <span style={{ fontSize: 12, fontWeight: 600, color: statusColor }}>
+          {statusLabel}
         </span>
-        {isParent && isPending && (
-          <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8 }}>
+          {isParent && isPending && (
+            <>
+              <button
+                onClick={() => (req.kind === "entry" ? onApproveEntry(req.id) : onApproveClaim(req.id))}
+                style={{ background: "var(--green)", color: "#fff", border: "none", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+              >
+                {t("validate")}
+              </button>
+              <button
+                onClick={() => (req.kind === "entry" ? onRejectEntry(req.id) : onRejectClaim(req.id))}
+                style={{ background: "none", color: "var(--red)", border: "1px solid var(--red)", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+              >
+                {t("reject")}
+              </button>
+            </>
+          )}
+          {canCancel && (
             <button
-              onClick={() => (req.kind === "entry" ? onApproveEntry(req.id) : onApproveClaim(req.id))}
-              style={{ background: "var(--green)", color: "#fff", border: "none", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
-            >
-              {t("validate")}
-            </button>
-            <button
-              onClick={() => (req.kind === "entry" ? onRejectEntry(req.id) : onRejectClaim(req.id))}
+              onClick={() => onCancelEntry(req.id)}
+              disabled={busyId === req.id}
               style={{ background: "none", color: "var(--red)", border: "1px solid var(--red)", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
             >
-              {t("reject")}
+              {busyId === req.id ? "…" : (CANCEL_BUTTON_LABEL[lang] || CANCEL_BUTTON_LABEL.fr)}
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-function RequestList({ list, isParent, lang, t, onApproveEntry, onRejectEntry, onApproveClaim, onRejectClaim }) {
+function RequestList({ list, isParent, lang, t, busyId, onApproveEntry, onRejectEntry, onApproveClaim, onRejectClaim, onCancelEntry }) {
   if (list.length === 0) {
     return <p style={{ color: "var(--text-faint)", textAlign: "center", padding: 20, fontSize: 14 }}>{t("noRequests")}</p>;
   }
@@ -339,9 +389,10 @@ function RequestList({ list, isParent, lang, t, onApproveEntry, onRejectEntry, o
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {list.map((req) => (
         <RequestRow
-          key={req.id} req={req} isParent={isParent} lang={lang} t={t}
+          key={req.id} req={req} isParent={isParent} lang={lang} t={t} busyId={busyId}
           onApproveEntry={onApproveEntry} onRejectEntry={onRejectEntry}
           onApproveClaim={onApproveClaim} onRejectClaim={onRejectClaim}
+          onCancelEntry={onCancelEntry}
         />
       ))}
     </div>
