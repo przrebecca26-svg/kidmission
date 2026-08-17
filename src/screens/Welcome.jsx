@@ -7,7 +7,7 @@ export default function Welcome({ onChooseParent, onChooseChild }) {
       <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
         <LanguageSwitcher lang={lang} setLang={setLang} />
       </div>
-      <h1 className="disp auth-title" style={{ fontSize: 30, textAlign: "center" }}>👩‍👧 Shyrel</h1>
+      <h1 className="disp auth-title" style={{ fontSize: 30, textAlign: "center" }}>🎯 KidMission</h1>
       <p className="auth-subtitle" style={{ textAlign: "center" }}>{t("whoConnects")}</p>
       <div className="role-choice">
         <button onClick={onChooseParent}>
