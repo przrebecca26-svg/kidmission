@@ -395,10 +395,21 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
 
   const enabledIds = settings?.enabledIds || {};
   const customItems = settings?.customItems || [];
+  // FIX (sync bug): these two were missing entirely, so itemsFor() below never
+  // knew about edits made in ChildSettings.jsx (builtinOverrides) nor about
+  // items hidden from there (hiddenBuiltinIds). ChildSettings.jsx already reads
+  // both of these via its own mergedBuiltin() — this makes ChildHome.jsx consistent.
+  const builtinOverrides = settings?.builtinOverrides || {};
+  const hiddenBuiltinIds = settings?.hiddenBuiltinIds || {};
 
   function itemsFor(cats) {
     const builtin = cats.flatMap((cat) =>
-      (BUILTIN_CATALOG[cat] || []).filter((it) => enabledIds[it.id]).map((it) => ({ ...it, cat }))
+      (BUILTIN_CATALOG[cat] || [])
+        .filter((it) => enabledIds[it.id] && !hiddenBuiltinIds[it.id])
+        .map((it) => {
+          const ov = builtinOverrides[it.id];
+          return { ...it, ...(ov || {}), id: it.id, cat };
+        })
     );
     const custom = customItems.filter((it) => cats.includes(it.cat));
     return [...builtin, ...custom];
