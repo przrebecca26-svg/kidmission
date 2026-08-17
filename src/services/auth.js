@@ -22,20 +22,42 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function findFamilyIdForUid(uid, _isRetry = false) {
+/**
+ * Looks up which family a given uid belongs to, by querying the "members"
+ * collectionGroup for a doc with that uid.
+ *
+ * RACE CONDITION FIX: right after signUpParent() creates a Firebase user,
+ * onAuthStateChanged fires almost immediately in AuthContext — often BEFORE
+ * signUpParent has finished writing the family/member Firestore docs. A first
+ * query can legitimately come back empty simply because the docs aren't
+ * written yet, not because the uid has no family. Same risk, to a lesser
+ * degree, right after a normal login on a slow connection (e.g. Shyrel's
+ * iPhone with Kidslox VPN/filtering active).
+ *
+ * So: retry a few times with a short delay before concluding "no family for
+ * this uid" — both on empty results and on permission-denied errors.
+ */
+export async function findFamilyIdForUid(uid, attempt = 0) {
   const cached = getCachedFamilyId();
   if (cached) return cached;
+  const MAX_ATTEMPTS = 5;
   try {
     const q = query(collectionGroup(db, "members"), where("uid", "==", uid), limit(1));
     const snap = await getDocs(q);
-    if (snap.empty) return null;
+    if (snap.empty) {
+      if (attempt < MAX_ATTEMPTS) {
+        await delay(500);
+        return findFamilyIdForUid(uid, attempt + 1);
+      }
+      return null;
+    }
     const familyId = snap.docs[0].ref.parent.parent.id;
     setCachedFamilyId(familyId);
     return familyId;
   } catch (err) {
-    if (err.code === "permission-denied" && !_isRetry) {
+    if (err.code === "permission-denied" && attempt < MAX_ATTEMPTS) {
       await delay(400);
-      return findFamilyIdForUid(uid, true);
+      return findFamilyIdForUid(uid, attempt + 1);
     }
     throw err;
   }
