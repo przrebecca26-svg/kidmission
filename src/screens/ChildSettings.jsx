@@ -89,7 +89,7 @@ export default function ChildSettings({ familyId, childId, onBack }) {
 
   async function handleSaveItem(item) {
     if (item._builtinId) {
-      await persist({ builtinOverrides: { ...builtinOverrides, [item._builtinId]: { fr: item.fr, he: item.he, val: item.val, unit: item.unit, severity: item.severity } } });
+      await persist({ builtinOverrides: { ...builtinOverrides, [item._builtinId]: { fr: item.fr, he: item.he, val: item.val, unit: item.unit, severity: item.severity ?? null } } });
       setEditingItem(null);
       return;
     }
@@ -502,13 +502,22 @@ function RuleModal({ rule, onSave, onClose }) {
 
     setSaving(true);
     try {
-      await onSave({
+      // IMPORTANT: only include _builtinRuleId / _paymentRule when they're actually
+      // truthy. Firestore rejects any field explicitly set to `undefined` — spreading
+      // `rule?._builtinRuleId` unconditionally (as before) meant a brand-new rule sent
+      // `_builtinRuleId: undefined` straight into the customRules array that gets
+      // written to Firestore, which silently failed the whole save.
+      const payload = {
         id: rule?.id || `custom-rule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        _builtinRuleId: rule?._builtinRuleId,
-        _paymentRule: rule?._paymentRule,
         fr: fr.trim(),
         he: he.trim(),
-      });
+      };
+      if (rule?._builtinRuleId) payload._builtinRuleId = rule._builtinRuleId;
+      if (rule?._paymentRule) payload._paymentRule = rule._paymentRule;
+      await onSave(payload);
+    } catch (err) {
+      console.error("Failed to save rule:", err);
+      setError("Une erreur est survenue en enregistrant. Réessaie.");
     } finally {
       setSaving(false);
     }
@@ -589,16 +598,27 @@ function ItemModal({ item, cat, valueLabel, defaultUnit, t, onSave, onClose }) {
 
     setSaving(true);
     try {
-      await onSave({
+      // IMPORTANT: Firestore rejects any field explicitly set to `undefined`.
+      // Previously `severity: isMalus ? severity : undefined` sent `undefined`
+      // for every non-malus item (Bonus, Hebdo, Jokers, Récompenses), and
+      // `_builtinId: item?._builtinId` sent `undefined` for every brand-new
+      // custom item — both silently failed the Firestore write with no error
+      // shown, because nothing caught the exception. Now we only include a key
+      // at all when it has a real value.
+      const payload = {
         id: item?.id || `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        _builtinId: item?._builtinId,
         fr: fr.trim(),
         he: he.trim(),
         val: parsedVal,
         unit,
         cat,
-        severity: isMalus ? severity : undefined,
-      });
+      };
+      if (item?._builtinId) payload._builtinId = item._builtinId;
+      if (isMalus) payload.severity = severity;
+      await onSave(payload);
+    } catch (err) {
+      console.error("Failed to save item:", err);
+      setError(t("errGeneric"));
     } finally {
       setSaving(false);
     }
