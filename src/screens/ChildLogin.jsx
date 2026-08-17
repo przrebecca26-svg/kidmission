@@ -39,12 +39,14 @@ export default function ChildLogin({ onBack, onLoggedIn }) {
         <h2 className="disp auth-title">{t("isThisYou")}</h2>
         {error && <div className="error-banner">{error}</div>}
         <form onSubmit={handleSubmit}>
-          {!cachedFamilyId && (
-            <div className="field">
-              <label>{t("familyCodeLabel")}</label>
-              <input value={familyId} onChange={(e) => setFamilyId(e.target.value)} placeholder="famille-perez" />
-            </div>
-          )}
+          {/* Toujours affiché (et modifiable), même si une valeur est déjà en cache
+              sur cet appareil — sinon impossible de se connecter à une AUTRE famille
+              que celle mémorisée en dernier sur ce téléphone (ex: tester plusieurs
+              comptes enfants de familles différentes sur le même appareil). */}
+          <div className="field">
+            <label>{t("familyCodeLabel")}</label>
+            <input value={familyId} onChange={(e) => setFamilyId(e.target.value)} placeholder="famille-perez" />
+          </div>
           <div className="field">
             <label>{t("yourUsername")}</label>
             <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="shyrel" autoCapitalize="none" />
