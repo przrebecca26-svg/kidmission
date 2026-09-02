@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   watchChildProfile, watchSettings, watchEntries, addEntry, approveEntry, rejectOrDeleteEntry, cancelEntry,
   watchRewardClaims, claimReward, approveRewardClaim, rejectRewardClaim, useJokerOnMalus,
+  watchPayments,
 } from "../services/firestore.js";
 import { logout } from "../services/auth.js";
 import { getItemLabel } from "../services/translate.js";
@@ -326,6 +327,7 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
   const [settings, setSettings] = useState(undefined);
   const [entries, setEntries] = useState(undefined);
   const [claims, setClaims] = useState(undefined);
+  const [payments, setPayments] = useState(undefined);
   const [activeTab, setActiveTab] = useState("bonus");
   const [busyId, setBusyId] = useState(null);
   const [feedback, setFeedback] = useState(null);
@@ -355,6 +357,7 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
   }, [familyId, childId]);
   useEffect(() => watchEntries(familyId, childId, setEntries), [familyId, childId]);
   useEffect(() => watchRewardClaims(familyId, childId, setClaims), [familyId, childId]);
+  useEffect(() => watchPayments(familyId, childId, setPayments), [familyId, childId]);
 
   useEffect(() => {
     if (!entries) return;
@@ -377,7 +380,7 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
     prevEntriesRef.current = entries;
   }, [entries, isParent, uid]);
 
-  if (profile === undefined || settings === undefined || entries === undefined || claims === undefined) {
+  if (profile === undefined || settings === undefined || entries === undefined || claims === undefined || payments === undefined) {
     return (
       <div style={{ minHeight: "100vh", background: "var(--pink-bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <p style={{ color: "var(--text-faint)" }}>{t("loading")}</p>
@@ -416,7 +419,20 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
   }
 
   const confirmedEntries = entries.filter((e) => e.status === "confirmed");
-  const moneyBalance = Math.max(0, confirmedEntries.filter((e) => e.unit === profile.currencyUnit).reduce((s, e) => s + e.amt, 0));
+
+  // FIX (versement reset): moneyBalance is now scoped to entries created AFTER
+  // the last recorded payment, so the badge Shyrel sees resets to 0 (or to
+  // whatever accrued since) once a payment is validated — matching the "Montant
+  // dû depuis le dernier versement" logic already used in ChildPayments.jsx.
+  // jokerBalance is intentionally left as a lifetime cumulative total — jokers
+  // never reset, per KidMission's core business rule.
+  const lastPaymentMillis = payments?.[0]?.createdAt?.toMillis?.() || 0;
+  const moneyBalance = Math.max(
+    0,
+    confirmedEntries
+      .filter((e) => e.unit === profile.currencyUnit && (e.createdAt?.toMillis?.() || 0) > lastPaymentMillis)
+      .reduce((s, e) => s + e.amt, 0)
+  );
   const jokerBalance = Math.max(0, confirmedEntries.filter((e) => e.unit === "🃏").reduce((s, e) => s + e.amt, 0));
   const streak = computeStreak(confirmedEntries);
 
