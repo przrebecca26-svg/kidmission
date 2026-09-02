@@ -105,9 +105,11 @@ service cloud.firestore {
     }
 
     match /families/{familyId}/children/{childId}/payments/{paymentId} {
-      // Versements are Maman-only end to end — a child never needs to see them
-      // to use the app day-to-day, and definitely shouldn't create/edit them.
-      allow read, write: if isParent(familyId);
+      // Read is now needed by the child too — ChildHome.jsx computes the money
+      // balance using the last payment date (fix from 02/09) — but write stays
+      // strictly parent-only.
+      allow read: if isParentOrSelf(familyId, childId);
+      allow write: if isParent(familyId);
     }
 
     match /families/{familyId}/children/{childId}/rewardClaims/{claimId} {
