@@ -420,19 +420,23 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
 
   const confirmedEntries = entries.filter((e) => e.status === "confirmed");
 
-  // FIX (versement reset): moneyBalance is now scoped to entries created AFTER
-  // the last recorded payment, so the badge Shyrel sees resets to 0 (or to
-  // whatever accrued since) once a payment is validated — matching the "Montant
-  // dû depuis le dernier versement" logic already used in ChildPayments.jsx.
-  // jokerBalance is intentionally left as a lifetime cumulative total — jokers
-  // never reset, per KidMission's core business rule.
+  // FIX (versement reset): moneyBalance is scoped to entries created AFTER
+  // the last recorded payment, so the badge resets to 0 (or to whatever
+  // accrued since) once a payment is validated.
+  //
+  // FIX (Oct 10, 2026 — negative balance): the balance must be allowed to go
+  // negative. If a child accrues malus before anything else (e.g. at the start
+  // of a new period, right after a payment resets the window), that's a real
+  // debt the child owes the parent — flooring it at 0 with Math.max(0, ...)
+  // was silently erasing that debt instead of showing it. Jokers are
+  // deliberately NOT changed here: a negative joker balance would be a logic
+  // bug (you can't spend a joker you don't have — useJokerOnMalus/handleDeclare
+  // already block that before the entry is even created), so jokerBalance
+  // keeps its floor at 0.
   const lastPaymentMillis = payments?.[0]?.createdAt?.toMillis?.() || 0;
-  const moneyBalance = Math.max(
-    0,
-    confirmedEntries
-      .filter((e) => e.unit === profile.currencyUnit && (e.createdAt?.toMillis?.() || 0) > lastPaymentMillis)
-      .reduce((s, e) => s + e.amt, 0)
-  );
+  const moneyBalance = confirmedEntries
+    .filter((e) => e.unit === profile.currencyUnit && (e.createdAt?.toMillis?.() || 0) > lastPaymentMillis)
+    .reduce((s, e) => s + e.amt, 0);
   const jokerBalance = Math.max(0, confirmedEntries.filter((e) => e.unit === "🃏").reduce((s, e) => s + e.amt, 0));
   const streak = computeStreak(confirmedEntries);
 
@@ -566,7 +570,15 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
         </div>
         <h1 className="disp" style={{ fontSize: 22, margin: "0 0 10px" }}>🧒 {profile.displayName}</h1>
         <div style={{ display: "flex", gap: 8 }}>
-          <span style={{ background: "rgba(255,255,255,0.18)", borderRadius: 999, padding: "6px 12px", fontSize: 13, fontWeight: 700 }} className="mono">
+          {/* FIX (Oct 10, 2026): visual cue when the balance is negative, so a
+              debt reads clearly as "owed" instead of looking like a normal credit. */}
+          <span
+            style={{
+              background: moneyBalance < 0 ? "rgba(179,58,58,0.35)" : "rgba(255,255,255,0.18)",
+              borderRadius: 999, padding: "6px 12px", fontSize: 13, fontWeight: 700,
+            }}
+            className="mono"
+          >
             <AnimatedNumber value={moneyBalance} /> {profile.currencyUnit}
           </span>
           <span style={{ background: "rgba(255,255,255,0.18)", borderRadius: 999, padding: "6px 12px", fontSize: 13, fontWeight: 700 }} className="mono">
