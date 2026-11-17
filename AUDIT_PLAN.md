@@ -10,19 +10,19 @@
 | 1 | Retirer clés Firebase du README | **FAIT** | |
 | 2 | Audit règles + isolation | **DOCUMENTÉ** | `SECURITY_NOTES.md` |
 | 3 | Branche de travail | **FAIT** | `grok-reprise` |
-| 4 | Tests parcours | **PRÉPARÉ** | `TEST_PARCOURS.md` |
-| 5 | Abonnements | **SQUELETTE + essai 7j** | `subscription.js` (trialDays: 7) |
+| 4 | Tests parcours | **PRÉPARÉ** | `TEST_PARCOURS.md` (inclut appareils) |
+| 5 | Abonnements | **SQUELETTE + essai 7j** | `subscription.js` |
 | 6 | Suppression de compte + export | **PRÉPARÉ** | Écran `AccountSettings` |
 | 7 | Pages légales | **FAIT** | `public/legal/` |
 | 8 | MyMemory | IDENTIFIÉ | À traiter |
-| 9 | Capacitor | **PRÉPARÉ** | Config déjà présente + `CAPACITOR.md` |
-| 10 | Registre bugs | PARTIEL | Ce fichier |
+| 9 | Capacitor | **PRÉPARÉ** | `CAPACITOR.md` |
+| 10 | Fiches stores | **PRÉPARÉ** | `STORE_LISTINGS.md` |
 
 ## Livrables récents
-- Essai gratuit de 7 jours ajouté aux plans d’abonnement.
-- Notes de préparation Capacitor (`CAPACITOR.md`) : étapes pour générer les projets iOS/Android, points Apple, etc.
+- Brouillons de fiches App Store et Google Play (`STORE_LISTINGS.md`).
+- Checklist de tests étendue aux vrais appareils (iPhone + Android).
 
-**Prochaine étape logique :** tests complets sur de vrais téléphones + préparation des fiches stores (ou audit final par Claude).
+**Prochaine étape logique :** générer les projets natifs, faire les tests sur vrais téléphones, puis audit final par Claude avant soumission.
 
 ---
 *Rien n’a été déployé sur le site live. Aucune famille existante n’est impactée.*
