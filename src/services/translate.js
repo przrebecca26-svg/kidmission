@@ -38,7 +38,9 @@ export async function getItemLabel(item, lang) {
   if (lang === "fr") return item.fr || item.he || "";
   if (lang === "he") return item.he || item.fr || "";
   const cache = loadCache();
-  const key = `${lang}:${item.id || item.fr}`;
+  // Key includes the French text: if the parent edits the label, the old
+  // EN/RU translation is not reused.
+  const key = `${lang}:${item.id || ""}:${item.fr || ""}`;
   if (cache[key]) return cache[key];
   const translated = await translateText(item.fr, "fr", lang);
   const label = translated || item.fr;

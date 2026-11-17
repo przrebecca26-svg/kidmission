@@ -17,6 +17,7 @@ const TXT = {
     exportBtn: "Exporter les données de ma famille (JSON)",
     exporting: "Export en cours…",
     exportOk: "Export téléchargé : profils enfants, réglages, missions, versements et récompenses.",
+    exportTimeout: "L’export prend trop de temps (connexion lente). Réessaie avec une meilleure connexion (Wi-Fi).",
     exportErr: "Erreur lors de l’export. Vérifie ta connexion et réessaie.",
     deleteTitle: "Suppression du compte",
     deleteInfo: "La suppression efface définitivement le compte parent, les profils enfants et tout l’historique. Elle est traitée par email dans un délai maximum de 30 jours, après vérification que la demande vient bien de toi.",
@@ -40,6 +41,7 @@ const TXT = {
     exportBtn: "ייצוא נתוני המשפחה (JSON)",
     exporting: "מייצא…",
     exportOk: "הייצוא הורד: פרופילי ילדים, הגדרות, משימות, תשלומים ופרסים.",
+    exportTimeout: "הייצוא לוקח יותר מדי זמן (חיבור איטי). יש לנסות שוב עם חיבור טוב יותר (Wi-Fi).",
     exportErr: "שגיאה בייצוא. יש לבדוק את החיבור ולנסות שוב.",
     deleteTitle: "מחיקת החשבון",
     deleteInfo: "המחיקה מוחקת לצמיתות את חשבון ההורה, פרופילי הילדים וכל ההיסטוריה. הבקשה מטופלת בדוא״ל תוך 30 יום לכל היותר, לאחר אימות שהבקשה הגיעה ממך.",
@@ -63,6 +65,7 @@ const TXT = {
     exportBtn: "Export my family’s data (JSON)",
     exporting: "Exporting…",
     exportOk: "Export downloaded: child profiles, settings, missions, payments and rewards.",
+    exportTimeout: "The export is taking too long (slow connection). Please try again on a better connection (Wi-Fi).",
     exportErr: "Export failed. Check your connection and try again.",
     deleteTitle: "Account deletion",
     deleteInfo: "Deletion permanently erases the parent account, child profiles and all history. It is handled by email within 30 days at most, after checking that the request really comes from you.",
@@ -86,6 +89,7 @@ const TXT = {
     exportBtn: "Экспортировать данные семьи (JSON)",
     exporting: "Экспорт…",
     exportOk: "Экспорт загружен: профили детей, настройки, задания, выплаты и награды.",
+    exportTimeout: "Экспорт занимает слишком много времени (медленное соединение). Попробуйте снова при лучшем подключении (Wi-Fi).",
     exportErr: "Ошибка экспорта. Проверьте подключение и попробуйте снова.",
     deleteTitle: "Удаление аккаунта",
     deleteInfo: "Удаление навсегда стирает аккаунт родителя, профили детей и всю историю. Запрос обрабатывается по электронной почте не более чем за 30 дней, после проверки, что он исходит от вас.",
@@ -148,31 +152,59 @@ function buildSummary(child, entries, payments) {
   };
 }
 
-async function buildFamilyExport(familyId) {
-  const familySnap = await getDoc(doc(db, "families", familyId));
-  const members = await readCollection(`families/${familyId}/members`);
-  const childrenProfiles = await readCollection(`families/${familyId}/children`);
+// Firebase Auth gives creationTime as an RFC string ("Fri, 14 Aug 2026 ...");
+// convert it to ISO like every other date in the file.
+function toIso(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? String(value) : d.toISOString();
+}
 
-  const children = [];
-  for (const child of childrenProfiles) {
-    const base = `families/${familyId}/children/${child.id}`;
-    const entries = byDate(await readCollection(`${base}/entries`));
-    const payments = byDate(await readCollection(`${base}/payments`));
-    children.push({
-      ...child,
-      summary: buildSummary(child, entries, payments),
-      settings: await readCollection(`${base}/settings`),
-      entries,
-      payments,
-      rewardClaims: byDate(await readCollection(`${base}/rewardClaims`)),
-    });
-  }
+// On a weak mobile connection Firestore can wait a long time for the server;
+// without a limit the button would stay on "Export en cours…" forever.
+const EXPORT_TIMEOUT_MS = 30000;
+function withTimeout(promise, ms) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error("export-timeout")), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+async function buildChildExport(familyId, child) {
+  const base = `families/${familyId}/children/${child.id}`;
+  const [entriesRaw, paymentsRaw, settings, claimsRaw] = await Promise.all([
+    readCollection(`${base}/entries`),
+    readCollection(`${base}/payments`),
+    readCollection(`${base}/settings`),
+    readCollection(`${base}/rewardClaims`),
+  ]);
+  const entries = byDate(entriesRaw);
+  const payments = byDate(paymentsRaw);
+  return {
+    ...child,
+    summary: buildSummary(child, entries, payments),
+    settings,
+    entries,
+    payments,
+    rewardClaims: byDate(claimsRaw),
+  };
+}
+
+async function buildFamilyExport(familyId) {
+  // All reads run in parallel (previously one after the other).
+  const [familySnap, members, childrenProfiles] = await Promise.all([
+    getDoc(doc(db, "families", familyId)),
+    readCollection(`families/${familyId}/members`),
+    readCollection(`families/${familyId}/children`),
+  ]);
+  const children = await Promise.all(childrenProfiles.map((child) => buildChildExport(familyId, child)));
 
   const user = auth.currentUser;
   return {
     exportedAt: new Date().toISOString(),
     familyId,
-    account: user ? { uid: user.uid, email: user.email || null, createdAt: user.metadata?.creationTime || null } : null,
+    account: user ? { uid: user.uid, email: user.email || null, createdAt: toIso(user.metadata?.creationTime) } : null,
     family: familySnap.exists() ? clean(familySnap.data()) : null,
     members,
     children,
@@ -189,7 +221,7 @@ export default function AccountSettings({ familyId, onBack }) {
     setExporting(true);
     setMessage(null);
     try {
-      const data = await buildFamilyExport(familyId);
+      const data = await withTimeout(buildFamilyExport(familyId), EXPORT_TIMEOUT_MS);
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -202,7 +234,7 @@ export default function AccountSettings({ familyId, onBack }) {
       setMessage(T.exportOk);
     } catch (err) {
       console.error("Export failed", err);
-      setMessage(T.exportErr);
+      setMessage(err?.message === "export-timeout" ? T.exportTimeout : T.exportErr);
     } finally {
       setExporting(false);
     }
