@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "./contexts/AuthContext.jsx";
 import Welcome from "./screens/Welcome.jsx";
 import SignupParent from "./screens/SignupParent.jsx";
@@ -19,6 +19,11 @@ export default function App() {
   const [paymentsChildId, setPaymentsChildId] = useState(null);
   const [accessChildId, setAccessChildId] = useState(null);
   const [showAccount, setShowAccount] = useState(false);
+
+  // Close the "Compte et données" screen whenever the signed-in user changes
+  // (logout from that screen must not reopen it at the next login).
+  const authUid = auth ? auth.uid : null;
+  useEffect(() => { setShowAccount(false); }, [authUid]);
 
   if (auth === undefined) {
     return (

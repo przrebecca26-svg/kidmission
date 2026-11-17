@@ -1,23 +1,28 @@
 # Notes de sécurité — KidMission
-**Branche :** `grok-reprise`  
-**Date :** 17 novembre 2026
+**Branche :** `grok-reprise` — **Mise à jour :** 17 novembre 2026 (audit Claude)
 
-## Points déjà solides (ne pas toucher)
-- Isolation famille / enfant via `isParent` et `isSelf`.
-- Enfant ne peut créer que des documents `pending` avec son propre uid + timestamp serveur.
-- Parent seul peut approuver, modifier ou supprimer.
-- Impossible pour un enfant de se promouvoir en parent.
-- Suppression de profil enfant désactivée côté client (volontaire).
+## Faille corrigée (17/11/2026)
+Avant : n'importe quel utilisateur connecté pouvait créer `families/{X}/members/{sonUid}` avec `role: "parent"`
+dans **n'importe quelle famille X** dont il connaissait l'identifiant (identifiant facile à deviner : `famille-<nom>`),
+et obtenait ainsi l'accès complet aux données des enfants de cette famille.
 
-## Points à renforcer (prochaines étapes)
-1. **Tests d’isolation manuels** — voir `TEST_PARCOURS.md` (section Isolation).
-2. **Cloud Function pour suppression de compte** — nécessaire pour effacer proprement Auth + toutes les données de la famille (sécurisé, pas depuis le client).
-3. **Export complet** — idem, via Function pour garantir l’exhaustivité et la sécurité.
-4. **MyMemory** — les appels de traduction côté client envoient du texte à un tiers. À remplacer par des traductions statiques ou désactiver pour les labels personnalisés.
-5. **Abonnements** — contrôle des droits (famille active / expirée) à ajouter dans les règles ou via claims personnalisés une fois les paiements en place.
+Après : la création d'un membre `parent` exige que l'appelant soit le `ownerUid` du document `families/{X}`
+(fonction `isFamilyOwner`). Compatible avec `signUpParent()` qui écrit la famille avant le membre.
+Règles publiées dans la console Firebase le 17/11/2026 (à confirmer par Rebecca).
 
-## Règles actuelles
-Les `firestore.rules` sont conservées telles quelles. Aucune modification pour l’instant afin de ne pas risquer de casser les familles existantes.
+## Autres changements de règles
+- Règle explicite pour la recherche collection-group `members` (lecture de **son propre** membership uniquement).
+- `families/{id}` : mise à jour autorisée pour un parent **uniquement** sur le champ `onboardingSeen`
+  (avant, `markOnboardingSeen()` était refusé en silence). `ownerUid` ne peut jamais changer.
 
----
-*Aucune donnée de famille réelle n’a été touchée.*
+## Points solides
+- Isolation par famille via `isActiveMember` / `isParent` / `isSelf`.
+- Un enfant ne crée que des entrées `pending`, avec son uid et l'horodatage serveur.
+- Un enfant ne peut pas se promouvoir parent (role/uid verrouillés).
+
+## Restant à faire
+1. **Suppression automatique du compte** : Cloud Function (plan Blaze) qui efface Auth (parent + comptes enfants) et toute l'arborescence `families/{id}`. En attendant : demande par email à contact@kidmission.app, traitée sous 30 jours.
+2. **Code enfant à 6 chiffres** : 1 million de combinaisons. Envisager Firebase App Check et/ou un code plus long.
+3. **Entrées enfant** : le montant (`amt`) d'une entrée `pending` est libre côté enfant ; le parent doit vérifier avant de valider.
+4. **MyMemory** : textes envoyés à un tiers pour traduction (déclaré dans la politique de confidentialité).
+5. **Abonnements** : contrôle des droits à ajouter une fois les achats in-app branchés.
