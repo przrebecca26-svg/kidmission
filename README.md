@@ -46,16 +46,9 @@ Claude sera portée dans une phase 2, une fois cette base testée.
 4. Build command : `npm run build` — Publish directory : `dist` (Netlify les devine généralement tout seul)
 
 **3. Ajoute la config Firebase dans Netlify (pas besoin de fichier .env sur GitHub)**
-Dans Netlify → **Site configuration → Environment variables → Add a variable**, ajoute ces 6 :
+Dans Netlify → **Site configuration → Environment variables → Add a variable**, ajoute les 6 variables `VITE_FIREBASE_*` (API key, auth domain, project ID, storage bucket, messaging sender ID, app ID).
 
-| Clé | Valeur |
-|---|---|
-| `VITE_FIREBASE_API_KEY` | `AIzaSyDG75AFptXTo8r_LWXxRyQppw7kCQEun2I` |
-| `VITE_FIREBASE_AUTH_DOMAIN` | `kidmission-32eb6.firebaseapp.com` |
-| `VITE_FIREBASE_PROJECT_ID` | `kidmission-32eb6` |
-| `VITE_FIREBASE_STORAGE_BUCKET` | `kidmission-32eb6.firebasestorage.app` |
-| `VITE_FIREBASE_MESSAGING_SENDER_ID` | `619180892984` |
-| `VITE_FIREBASE_APP_ID` | `1:619180892984:web:5a5ade6559a548c0c817cd` |
+**Les valeurs ne sont volontairement plus listées ici** pour des raisons de sécurité. Elles sont déjà configurées dans Netlify et ne doivent pas figurer dans le dépôt public.
 
 **4. Déploie**
 **Deploys → Trigger deploy → Deploy site**. Après une minute, Netlify donne une URL du style `kidmission-xxxx.netlify.app`.
