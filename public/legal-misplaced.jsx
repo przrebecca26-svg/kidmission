@@ -1,0 +1,1 @@
+This file was previously at public/legal and contained SignupParent.jsx code by mistake. Moved here for reference. The real legal pages are now under public/legal/.
