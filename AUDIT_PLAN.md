@@ -8,22 +8,21 @@
 | # | Correction | Statut | Notes |
 |---|------------|--------|-------|
 | 1 | Retirer clés Firebase du README | **FAIT** | |
-| 2 | Audit règles + isolation | **EN COURS** | Documenté |
+| 2 | Audit règles + isolation | **DOCUMENTÉ** | `SECURITY_NOTES.md` |
 | 3 | Branche de travail | **FAIT** | `grok-reprise` |
 | 4 | Tests parcours | **PRÉPARÉ** | `TEST_PARCOURS.md` |
-| 5 | Abonnements | ABSENT | Prochaine étape après légal |
-| 6 | Suppression de compte + export | **PRÉPARÉ** | Écran `AccountSettings` ajouté (export demo + demande de suppression) |
-| 7 | Pages légales | **FAIT** | `public/legal/cgu.html` + `confidentialite.html` |
+| 5 | Abonnements | **SQUELETTE** | `src/services/subscription.js` (modèle + helpers, pas encore IAP) |
+| 6 | Suppression de compte + export | **PRÉPARÉ** | Écran `AccountSettings` |
+| 7 | Pages légales | **FAIT** | `public/legal/` |
 | 8 | MyMemory | IDENTIFIÉ | À traiter |
 | 9 | Capacitor | ABSENT | |
 | 10 | Registre bugs | PARTIEL | Ce fichier |
 
-## Livrables de cette étape
-- Pages CGU et Politique de confidentialité accessibles.
-- Nouvel écran « Compte et données » depuis l’accueil parent (bouton à côté de Déconnexion).
-- Export (version de démonstration) + demande de suppression avec double confirmation.
+## Livrables récents
+- Notes de sécurité (`SECURITY_NOTES.md`) : isolation confirmée, points à renforcer listés.
+- Squelette d’abonnements (`subscription.js`) : plans mensuel/annuel, fonction `isFamilySubscribed` (retourne true pour l’instant afin de ne rien casser).
 
-**Note :** la suppression réelle et l’export complet des données nécessiteront une Cloud Function pour être sécurisés. L’interface est prête.
+**Prochaine étape logique :** préparer la base Capacitor (config, icônes) sans soumettre, puis tests sur vrais appareils.
 
 ---
-*Rien n’a été déployé sur le site live.*
+*Rien n’a été déployé sur le site live. Aucune famille existante n’est impactée.*
