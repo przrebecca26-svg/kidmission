@@ -479,19 +479,24 @@ function RuleModal({ rule, onSave, onClose }) {
     ? "Modifier la règle"
     : "Nouvelle règle";
 
-  async function handleFrBlur() {
-    if (!fr.trim() || he.trim()) return;
+  // Which field was filled by the machine translator ("he" | "fr" | null).
+  // Shown as a warning so the parent re-reads it: names (pets, people) and
+  // typos are often mistranslated (e.g. "Stitch" -> "couture").
+  const [autoField, setAutoField] = useState(null);
+
+  async function handleFrBlur(force = false) {
+    if (!fr.trim() || (he.trim() && !force)) return;
     setTranslating("he");
     const result = await translateFrToHe(fr);
-    if (result) setHe(result);
+    if (result) { setHe(result); setAutoField("he"); }
     setTranslating(null);
   }
 
-  async function handleHeBlur() {
-    if (!he.trim() || fr.trim()) return;
+  async function handleHeBlur(force = false) {
+    if (!he.trim() || (fr.trim() && !force)) return;
     setTranslating("fr");
     const result = await translateHeToFr(he);
-    if (result) setFr(result);
+    if (result) { setFr(result); setAutoField("fr"); }
     setTranslating(null);
   }
 
@@ -533,8 +538,8 @@ function RuleModal({ rule, onSave, onClose }) {
             <label>Texte en français</label>
             <textarea
               value={fr}
-              onChange={(e) => setFr(e.target.value)}
-              onBlur={handleFrBlur}
+              onChange={(e) => { setFr(e.target.value); if (autoField === "fr") setAutoField(null); }}
+              onBlur={() => handleFrBlur()}
               rows={3}
               style={{ width: "100%", fontFamily: "inherit", fontSize: 14, padding: 10, borderRadius: 10, border: "1px solid var(--pink-input-border)", resize: "vertical" }}
             />
@@ -544,11 +549,21 @@ function RuleModal({ rule, onSave, onClose }) {
             <textarea
               dir="rtl"
               value={he}
-              onChange={(e) => setHe(e.target.value)}
-              onBlur={handleHeBlur}
+              onChange={(e) => { setHe(e.target.value); if (autoField === "he") setAutoField(null); }}
+              onBlur={() => handleHeBlur()}
               rows={3}
-              style={{ width: "100%", fontFamily: "inherit", fontSize: 14, padding: 10, borderRadius: 10, border: "1px solid var(--pink-input-border)", resize: "vertical" }}
+              style={{ width: "100%", fontFamily: "inherit", fontSize: 14, padding: 10, borderRadius: 10, border: autoField === "he" ? "2px solid #e6a23c" : "1px solid var(--pink-input-border)", resize: "vertical" }}
             />
+            {autoField && (
+              <p style={{ fontSize: 12, color: "#9a5b00", margin: "6px 0 0", lineHeight: 1.4 }}>
+                ⚠️ Traduction automatique : relis-la et corrige-la si besoin (les prénoms et noms propres sont souvent mal traduits).
+              </p>
+            )}
+            {fr.trim() && !translating && (
+              <button type="button" className="link-btn" style={{ marginTop: 4, fontSize: 12 }} onClick={() => handleFrBlur(true)}>
+                ↻ Retraduire depuis le français
+              </button>
+            )}
           </div>
           <button className="btn-primary" type="submit" disabled={saving || translating}>
             {saving ? "…" : "Enregistrer"}
@@ -573,19 +588,24 @@ function ItemModal({ item, cat, valueLabel, defaultUnit, t, onSave, onClose }) {
   const isBuiltinEdit = !!item?._builtinId;
   const isMalus = cat === "malus";
 
-  async function handleFrBlur() {
-    if (!fr.trim() || he.trim()) return;
+  // Which field was filled by the machine translator ("he" | "fr" | null).
+  // Shown as a warning so the parent re-reads it: names (pets, people) and
+  // typos are often mistranslated (e.g. "Stitch" -> "couture").
+  const [autoField, setAutoField] = useState(null);
+
+  async function handleFrBlur(force = false) {
+    if (!fr.trim() || (he.trim() && !force)) return;
     setTranslating("he");
     const result = await translateFrToHe(fr);
-    if (result) setHe(result);
+    if (result) { setHe(result); setAutoField("he"); }
     setTranslating(null);
   }
 
-  async function handleHeBlur() {
-    if (!he.trim() || fr.trim()) return;
+  async function handleHeBlur(force = false) {
+    if (!he.trim() || (fr.trim() && !force)) return;
     setTranslating("fr");
     const result = await translateHeToFr(he);
-    if (result) setFr(result);
+    if (result) { setFr(result); setAutoField("fr"); }
     setTranslating(null);
   }
 
@@ -634,11 +654,19 @@ function ItemModal({ item, cat, valueLabel, defaultUnit, t, onSave, onClose }) {
         <form onSubmit={handleSubmit}>
           <div className="field">
             <label>{t("frLabelField")}</label>
-            <input value={fr} onChange={(e) => setFr(e.target.value)} onBlur={handleFrBlur} placeholder="Ranger sa chambre" />
+            <input value={fr} onChange={(e) => { setFr(e.target.value); if (autoField === "fr") setAutoField(null); }} onBlur={() => handleFrBlur()} placeholder="Ranger sa chambre" style={autoField === "fr" ? { border: "2px solid #e6a23c" } : undefined} />
           </div>
           <div className="field">
             <label>{t("heLabelField")} {translating === "he" && t("translatingSuffix")}</label>
-            <input dir="rtl" value={he} onChange={(e) => setHe(e.target.value)} onBlur={handleHeBlur} placeholder="לסדר את החדר" />
+            <input dir="rtl" value={he} onChange={(e) => { setHe(e.target.value); if (autoField === "he") setAutoField(null); }} onBlur={() => handleHeBlur()} placeholder="לסדר את החדר" style={autoField === "he" ? { border: "2px solid #e6a23c" } : undefined} />
+            {autoField && (
+              <p style={{ fontSize: 12, color: "#9a5b00", margin: "6px 0 0", lineHeight: 1.4 }}>{t("autoTranslatedHint")}</p>
+            )}
+            {fr.trim() && !translating && (
+              <button type="button" className="link-btn" style={{ marginTop: 4, fontSize: 12 }} onClick={() => handleFrBlur(true)}>
+                {t("retranslate")}
+              </button>
+            )}
           </div>
           <div className="field">
             <label>{t("rewardTypeShort")}</label>

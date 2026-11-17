@@ -153,6 +153,8 @@ const STRINGS = {
   newItem: { fr: "Nouvel item", he: "פריט חדש", en: "New item", ru: "Новый пункт" },
   frLabelField: { fr: "Libellé (français)", he: "תווית (צרפתית)", en: "Label (French)", ru: "Название (французский)" },
   heLabelField: { fr: "Libellé (hébreu)", he: "תווית (עברית)", en: "Label (Hebrew)", ru: "Название (иврит)" },
+  autoTranslatedHint: { fr: "⚠️ Traduction automatique : relis-la et corrige-la si besoin (les prénoms et noms propres sont souvent mal traduits).", he: "⚠️ תרגום אוטומטי: כדאי לבדוק ולתקן במידת הצורך (שמות פרטיים ושמות של חיות מחמד מתורגמים לעיתים קרובות באופן שגוי).", en: "⚠️ Automatic translation: please check and correct it if needed (names are often mistranslated).", ru: "⚠️ Автоматический перевод: проверьте и исправьте при необходимости (имена часто переводятся неверно)." },
+  retranslate: { fr: "↻ Retraduire", he: "↻ לתרגם מחדש", en: "↻ Translate again", ru: "↻ Перевести заново" },
   translatingSuffix: { fr: "— traduction…", he: "— מתרגם…", en: "— translating…", ru: "— перевод…" },
   rewardTypeShort: { fr: "Type de récompense", he: "סוג הפרס", en: "Reward type", ru: "Тип награды" },
   saveSimple: { fr: "Enregistrer", he: "שמור", en: "Save", ru: "Сохранить" },
