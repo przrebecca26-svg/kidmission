@@ -135,7 +135,7 @@ async function getConfirmedJokerBalance(familyId, childId) {
  * that re-checks eligibility at approval time, so a malus can never end up
  * cancelled twice even if two requests targeted it.
  */
-export async function approveEntry(familyId, childId, entryId) {
+export async function approveEntry(familyId, childId, entryId, approvedBy = null) {
   const entryRef = doc(db, `families/${familyId}/children/${childId}/entries`, entryId);
   const snap = await getDoc(entryRef);
   if (!snap.exists()) return;
@@ -152,7 +152,12 @@ export async function approveEntry(familyId, childId, entryId) {
     await approveLinkedMalusCancel(familyId, childId, entryId, entry.linkedMalusId);
     return;
   }
-  await updateDoc(entryRef, { status: "confirmed" });
+  // Audit trail: who validated the request, and when (visible in the data export).
+  await updateDoc(entryRef, {
+    status: "confirmed",
+    confirmedBy: approvedBy,
+    confirmedAt: serverTimestamp(),
+  });
 }
 
 export async function rejectOrDeleteEntry(familyId, childId, entryId) {
