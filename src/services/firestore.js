@@ -149,7 +149,7 @@ export async function approveEntry(familyId, childId, entryId, approvedBy = null
   }
 
   if (entry.linkedMalusId) {
-    await approveLinkedMalusCancel(familyId, childId, entryId, entry.linkedMalusId);
+    await approveLinkedMalusCancel(familyId, childId, entryId, entry.linkedMalusId, approvedBy);
     return;
   }
   // Audit trail: who validated the request, and when (visible in the data export).
@@ -219,7 +219,7 @@ export async function useJokerOnMalus(familyId, childId, { malusEntryId, jokerIt
   });
 }
 
-async function approveLinkedMalusCancel(familyId, childId, entryId, linkedMalusId) {
+async function approveLinkedMalusCancel(familyId, childId, entryId, linkedMalusId, approvedBy = null) {
   const entryRef = doc(db, `families/${familyId}/children/${childId}/entries`, entryId);
   const malusRef = doc(db, `families/${familyId}/children/${childId}/entries`, linkedMalusId);
 
@@ -242,7 +242,7 @@ async function approveLinkedMalusCancel(familyId, childId, entryId, linkedMalusI
       cancelledAt: serverTimestamp(),
       cancelReason: "joker",
     });
-    tx.update(entryRef, { status: "confirmed" });
+    tx.update(entryRef, { status: "confirmed", confirmedBy: approvedBy, confirmedAt: serverTimestamp() });
   });
 }
 

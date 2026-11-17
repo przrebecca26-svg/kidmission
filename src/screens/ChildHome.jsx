@@ -453,7 +453,10 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
     .filter((e) => e.unit === profile.currencyUnit && (e.createdAt?.toMillis?.() || 0) > lastPaymentMillis)
     .reduce((s, e) => s + e.amt, 0);
   const jokerBalance = Math.max(0, confirmedEntries.filter((e) => e.unit === "🃏").reduce((s, e) => s + e.amt, 0));
-  const streak = computeStreak(confirmedEntries);
+  // FIX (Nov 17, 2026): the streak restarts after each versement, like moneyBalance.
+  const streak = computeStreak(
+    confirmedEntries.filter((e) => (e.createdAt?.toMillis?.() || 0) > lastPaymentMillis)
+  );
 
   const eligibleSmallMalus = confirmedEntries.filter((e) => e.cat === "malus" && e.severity === "small");
 

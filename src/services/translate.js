@@ -4,14 +4,24 @@
  * returns an empty string so the caller can fall back to manual entry rather
  * than crash the form.
  */
+const MYMEMORY_CONTACT = "contact.kidmission@gmail.com";
+
 export async function translateText(text, fromLang, toLang) {
   const trimmed = (text || "").trim();
   if (!trimmed) return "";
   try {
-    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(trimmed)}&langpair=${fromLang}|${toLang}`;
+    // `de` = contact email: raises MyMemory's free daily quota (developer
+    // contact address only — never a user's email).
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(trimmed)}&langpair=${fromLang}|${toLang}&de=${encodeURIComponent(MYMEMORY_CONTACT)}`;
     const res = await fetch(url);
+    if (!res.ok) return "";
     const data = await res.json();
-    return data?.responseData?.translatedText?.trim() || "";
+    // When the quota is exhausted MyMemory still answers, but with a warning
+    // text in place of the translation — treat that as a failure.
+    if (Number(data?.responseStatus) !== 200) return "";
+    const out = data?.responseData?.translatedText?.trim() || "";
+    if (/MYMEMORY WARNING|QUERY LENGTH LIMIT|INVALID/i.test(out)) return "";
+    return out;
   } catch {
     return "";
   }
@@ -38,11 +48,13 @@ export async function getItemLabel(item, lang) {
   if (lang === "fr") return item.fr || item.he || "";
   if (lang === "he") return item.he || item.fr || "";
   const cache = loadCache();
-  const key = `${lang}:${item.id || item.fr}`;
+  // Keyed on the French text itself (not the item id) so that editing a
+  // mission's wording refreshes its EN/RU label instead of showing the old one.
+  const key = `${lang}:${item.fr}`;
   if (cache[key]) return cache[key];
   const translated = await translateText(item.fr, "fr", lang);
-  const label = translated || item.fr;
-  cache[key] = label;
+  if (!translated) return item.fr; // don't cache failures: retry next time
+  cache[key] = translated;
   saveCache(cache);
-  return label;
+  return translated;
 }
