@@ -40,6 +40,16 @@ const NOT_ENOUGH_JOKERS = {
   ru: "У тебя недостаточно доступных джокеров 🃏",
 };
 
+// Anti double-tap: the same mission declared again within this window is
+// treated as a probable accidental repeat and needs an explicit confirmation.
+const DUPLICATE_WINDOW_MS = 30_000;
+const DUPLICATE_CONFIRM = {
+  fr: "Tu viens déjà d'ajouter cette mission. L'ajouter encore une fois ?",
+  he: "המשימה הזו כבר נוספה הרגע. להוסיף אותה שוב?",
+  en: "You just added this mission. Add it again?",
+  ru: "Это задание только что добавлено. Добавить ещё раз?",
+};
+
 const SEVERITY_BADGE = {
   small: { fr: "🔹 Petit malus", he: "🔹 קנס קטן", en: "🔹 Small", ru: "🔹 Малый" },
   large: { fr: "🔺 Gros malus", he: "🔺 קנס גדול", en: "🔺 Large", ru: "🔺 Крупный" },
@@ -333,6 +343,11 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
   const [feedback, setFeedback] = useState(null);
   const [jokerCancelPicker, setJokerCancelPicker] = useState(null);
   const prevEntriesRef = useRef(null);
+  // Synchronous lock (state updates are async, so `busyId` alone can't stop
+  // two taps fired before the next render) + last declared item for the
+  // duplicate window above.
+  const declareLockRef = useRef(false);
+  const lastDeclaredRef = useRef({ itemId: null, at: 0 });
   const [lastSeenMs, setLastSeenMs] = useState(0);
 
   useEffect(() => {
@@ -447,6 +462,12 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
       window.alert(NOT_ENOUGH_JOKERS[lang] || NOT_ENOUGH_JOKERS.fr);
       return;
     }
+    if (declareLockRef.current) return;
+    const last = lastDeclaredRef.current;
+    if (last.itemId === item.id && Date.now() - last.at < DUPLICATE_WINDOW_MS) {
+      if (!window.confirm(DUPLICATE_CONFIRM[lang] || DUPLICATE_CONFIRM.fr)) return;
+    }
+    declareLockRef.current = true;
     setBusyId(item.id);
     try {
       const unit = unitFor(item, profile.currencyUnit);
@@ -461,7 +482,9 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
       else if (item.cat === "jokerEarn") setFeedback({ type: "jokerEarn", line: `+${item.val} 🃏` });
       else if (item.cat === "jokerUse") setFeedback({ type: "jokerUse", line: `-${item.val} 🃏` });
       else setFeedback({ type: "bonus", line });
+      lastDeclaredRef.current = { itemId: item.id, at: Date.now() };
     } finally {
+      declareLockRef.current = false;
       setBusyId(null);
     }
   }
@@ -513,7 +536,7 @@ export default function ChildHome({ familyId, childId, uid, isParent, onBack }) 
   async function handleApproveEntry(entryId) {
     setBusyId(entryId);
     try {
-      await approveEntry(familyId, childId, entryId);
+      await approveEntry(familyId, childId, entryId, uid);
     } catch (err) {
       window.alert(err.message || "Une erreur est survenue.");
     } finally {

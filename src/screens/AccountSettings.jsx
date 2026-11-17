@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { collection, doc, getDoc, getDocs } from "firebase/firestore";
-import { db } from "../firebase.js";
+import { db, auth } from "../firebase.js";
 import { logout } from "../services/auth.js";
 import { useLang } from "../i18n.jsx";
 
@@ -27,6 +27,8 @@ const TXT = {
     mailSubject: "Demande de suppression de compte KidMission",
     mailBody: (id) => `Bonjour,\n\nJe demande la suppression définitive de mon compte KidMission et de toutes les données de ma famille.\n\nIdentifiant famille : ${id}\n\nMerci.`,
     logout: "Se déconnecter",
+    cancel: "Annuler",
+    continue: "Continuer",
   },
   he: {
     back: "→ חזרה",
@@ -48,6 +50,8 @@ const TXT = {
     mailSubject: "בקשה למחיקת חשבון KidMission",
     mailBody: (id) => `שלום,\n\nאני מבקש/ת למחוק לצמיתות את חשבון KidMission שלי ואת כל נתוני המשפחה.\n\nמזהה משפחה: ${id}\n\nתודה.`,
     logout: "התנתקות",
+    cancel: "ביטול",
+    continue: "להמשיך",
   },
   en: {
     back: "← Back",
@@ -69,6 +73,8 @@ const TXT = {
     mailSubject: "KidMission account deletion request",
     mailBody: (id) => `Hello,\n\nI request the permanent deletion of my KidMission account and all my family's data.\n\nFamily ID: ${id}\n\nThank you.`,
     logout: "Log out",
+    cancel: "Cancel",
+    continue: "Continue",
   },
   ru: {
     back: "← Назад",
@@ -90,6 +96,8 @@ const TXT = {
     mailSubject: "Запрос на удаление аккаунта KidMission",
     mailBody: (id) => `Здравствуйте,\n\nПрошу окончательно удалить мой аккаунт KidMission и все данные моей семьи.\n\nID семьи: ${id}\n\nСпасибо.`,
     logout: "Выйти",
+    cancel: "Отмена",
+    continue: "Продолжить",
   },
 };
 
@@ -111,6 +119,35 @@ async function readCollection(path) {
   return snap.docs.map((d) => ({ id: d.id, ...clean(d.data()) }));
 }
 
+// Oldest first, so the file reads like a history.
+function byDate(list) {
+  return [...list].sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+}
+
+// Same rules as the balances shown in ChildHome.jsx: money counts confirmed
+// entries created after the last payment; jokers are cumulative (never reset).
+function buildSummary(child, entries, payments) {
+  const confirmed = entries.filter((e) => e.status === "confirmed");
+  const lastPayment = payments.length ? payments[payments.length - 1] : null;
+  const lastPaymentAt = lastPayment?.createdAt || null;
+  const moneyBalance = confirmed
+    .filter((e) => e.unit === child.currencyUnit && (!lastPaymentAt || String(e.createdAt) > lastPaymentAt))
+    .reduce((s, e) => s + (e.amt || 0), 0);
+  const jokerBalance = Math.max(0, confirmed.filter((e) => e.unit === "🃏").reduce((s, e) => s + (e.amt || 0), 0));
+  return {
+    currencyUnit: child.currencyUnit || null,
+    moneyBalanceSinceLastPayment: moneyBalance,
+    jokerBalance,
+    totalPaid: payments.reduce((s, p) => s + (p.amount || 0), 0),
+    lastPaymentAt,
+    entriesCount: {
+      confirmed: confirmed.length,
+      pending: entries.filter((e) => e.status === "pending").length,
+      cancelled: entries.filter((e) => e.status === "cancelled").length,
+    },
+  };
+}
+
 async function buildFamilyExport(familyId) {
   const familySnap = await getDoc(doc(db, "families", familyId));
   const members = await readCollection(`families/${familyId}/members`);
@@ -119,18 +156,23 @@ async function buildFamilyExport(familyId) {
   const children = [];
   for (const child of childrenProfiles) {
     const base = `families/${familyId}/children/${child.id}`;
+    const entries = byDate(await readCollection(`${base}/entries`));
+    const payments = byDate(await readCollection(`${base}/payments`));
     children.push({
       ...child,
+      summary: buildSummary(child, entries, payments),
       settings: await readCollection(`${base}/settings`),
-      entries: await readCollection(`${base}/entries`),
-      payments: await readCollection(`${base}/payments`),
-      rewardClaims: await readCollection(`${base}/rewardClaims`),
+      entries,
+      payments,
+      rewardClaims: byDate(await readCollection(`${base}/rewardClaims`)),
     });
   }
 
+  const user = auth.currentUser;
   return {
     exportedAt: new Date().toISOString(),
     familyId,
+    account: user ? { uid: user.uid, email: user.email || null, createdAt: user.metadata?.creationTime || null } : null,
     family: familySnap.exists() ? clean(familySnap.data()) : null,
     members,
     children,
@@ -166,9 +208,22 @@ export default function AccountSettings({ familyId, onBack }) {
     }
   }
 
+  // Two-step in-app confirmation (replaces the native window.confirm dialogs).
+  // confirmStep: 0 = closed, 1 = first question, 2 = last confirmation.
+  const [confirmStep, setConfirmStep] = useState(0);
+
   function handleDeleteRequest() {
-    if (!window.confirm(T.confirm1)) return;
-    if (!window.confirm(T.confirm2)) return;
+    if (exporting) return;
+    setMessage(null);
+    setConfirmStep(1);
+  }
+
+  function handleConfirmContinue() {
+    if (confirmStep === 1) {
+      setConfirmStep(2);
+      return;
+    }
+    setConfirmStep(0);
     const mailto =
       `mailto:${CONTACT_EMAIL}` +
       `?subject=${encodeURIComponent(T.mailSubject)}` +
@@ -209,7 +264,9 @@ export default function AccountSettings({ familyId, onBack }) {
         <p style={{ fontSize: 13.5, margin: "0 0 12px", lineHeight: 1.5 }}>{T.deleteInfo}</p>
         <button
           onClick={handleDeleteRequest}
+          disabled={exporting}
           style={{
+            opacity: exporting ? 0.5 : 1,
             display: "block",
             width: "100%",
             padding: "12px",
@@ -218,7 +275,7 @@ export default function AccountSettings({ familyId, onBack }) {
             border: "1px solid #c0392b",
             borderRadius: 10,
             fontWeight: 600,
-            cursor: "pointer",
+            cursor: exporting ? "default" : "pointer",
           }}
         >
           {T.deleteBtn}
@@ -234,6 +291,39 @@ export default function AccountSettings({ familyId, onBack }) {
           {T.logout}
         </button>
       </div>
+
+      {confirmStep > 0 && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setConfirmStep(0)}
+          style={{ position: "fixed", inset: 0, background: "rgba(60, 20, 40, 0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 1000 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: "#fff", borderRadius: 18, padding: "22px 20px 18px", maxWidth: 360, width: "100%", boxShadow: "0 12px 40px rgba(0,0,0,0.2)" }}
+          >
+            <div style={{ fontSize: 30, textAlign: "center", marginBottom: 8 }}>{confirmStep === 1 ? "⚠️" : "✉️"}</div>
+            <p style={{ fontSize: 15, lineHeight: 1.5, margin: "0 0 18px", textAlign: "center" }}>
+              {confirmStep === 1 ? T.confirm1 : T.confirm2}
+            </p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={() => setConfirmStep(0)}
+                style={{ flex: 1, padding: 12, borderRadius: 10, border: "1px solid var(--pink-header)", background: "#fff", color: "var(--pink-header)", fontWeight: 600, cursor: "pointer" }}
+              >
+                {T.cancel}
+              </button>
+              <button
+                onClick={handleConfirmContinue}
+                style={{ flex: 1, padding: 12, borderRadius: 10, border: "none", background: "#c0392b", color: "#fff", fontWeight: 600, cursor: "pointer" }}
+              >
+                {T.continue}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
