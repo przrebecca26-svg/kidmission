@@ -21,7 +21,7 @@ Règles publiées dans la console Firebase le 17/11/2026 (à confirmer par Rebec
 - Un enfant ne peut pas se promouvoir parent (role/uid verrouillés).
 
 ## Restant à faire
-1. **Suppression automatique du compte** : Cloud Function (plan Blaze) qui efface Auth (parent + comptes enfants) et toute l'arborescence `families/{id}`. En attendant : demande par email à contact@kidmission.app, traitée sous 30 jours.
+1. **Suppression automatique du compte** : Cloud Function (plan Blaze) qui efface Auth (parent + comptes enfants) et toute l'arborescence `families/{id}`. En attendant : demande par email à contact.kidmission@gmail.com, traitée sous 30 jours.
 2. **Code enfant à 6 chiffres** : 1 million de combinaisons. Envisager Firebase App Check et/ou un code plus long.
 3. **Entrées enfant** : le montant (`amt`) d'une entrée `pending` est libre côté enfant ; le parent doit vérifier avant de valider.
 4. **MyMemory** : textes envoyés à un tiers pour traduction (déclaré dans la politique de confidentialité).

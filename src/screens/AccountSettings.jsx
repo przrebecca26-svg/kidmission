@@ -4,7 +4,7 @@ import { db } from "../firebase.js";
 import { logout } from "../services/auth.js";
 import { useLang } from "../i18n.jsx";
 
-const CONTACT_EMAIL = "contact@kidmission.app";
+const CONTACT_EMAIL = "contact.kidmission@gmail.com";
 
 const TXT = {
   fr: {
