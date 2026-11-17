@@ -11,18 +11,18 @@
 | 2 | Audit règles + isolation | **DOCUMENTÉ** | `SECURITY_NOTES.md` |
 | 3 | Branche de travail | **FAIT** | `grok-reprise` |
 | 4 | Tests parcours | **PRÉPARÉ** | `TEST_PARCOURS.md` |
-| 5 | Abonnements | **SQUELETTE** | `src/services/subscription.js` (modèle + helpers, pas encore IAP) |
+| 5 | Abonnements | **SQUELETTE + essai 7j** | `subscription.js` (trialDays: 7) |
 | 6 | Suppression de compte + export | **PRÉPARÉ** | Écran `AccountSettings` |
 | 7 | Pages légales | **FAIT** | `public/legal/` |
 | 8 | MyMemory | IDENTIFIÉ | À traiter |
-| 9 | Capacitor | ABSENT | |
+| 9 | Capacitor | **PRÉPARÉ** | Config déjà présente + `CAPACITOR.md` |
 | 10 | Registre bugs | PARTIEL | Ce fichier |
 
 ## Livrables récents
-- Notes de sécurité (`SECURITY_NOTES.md`) : isolation confirmée, points à renforcer listés.
-- Squelette d’abonnements (`subscription.js`) : plans mensuel/annuel, fonction `isFamilySubscribed` (retourne true pour l’instant afin de ne rien casser).
+- Essai gratuit de 7 jours ajouté aux plans d’abonnement.
+- Notes de préparation Capacitor (`CAPACITOR.md`) : étapes pour générer les projets iOS/Android, points Apple, etc.
 
-**Prochaine étape logique :** préparer la base Capacitor (config, icônes) sans soumettre, puis tests sur vrais appareils.
+**Prochaine étape logique :** tests complets sur de vrais téléphones + préparation des fiches stores (ou audit final par Claude).
 
 ---
 *Rien n’a été déployé sur le site live. Aucune famille existante n’est impactée.*
