@@ -9,8 +9,9 @@ const PENDING_TAB_KEY = "kidmission_pending_tab";
 
 const DISCOVER_LABEL = { fr: "❓ Découvrir KidMission", he: "❓ להכיר את KidMission", en: "❓ Discover KidMission", ru: "❓ Узнать о KidMission" };
 const PICK_CHILD_TITLE = { fr: "Pour quel enfant ?", he: "עבור איזה ילד/ה?", en: "For which child?", ru: "Для какого ребёнка?" };
+const ACCOUNT_LABEL = { fr: "Compte et données", he: "חשבון ונתונים", en: "Account & data", ru: "Аккаунт и данные" };
 
-export default function FamilyHome({ familyId, onOpenChild, onOpenSettings, onOpenPayments, onOpenAccess }) {
+export default function FamilyHome({ familyId, onOpenChild, onOpenSettings, onOpenPayments, onOpenAccess, onOpenAccount }) {
   const { lang, setLang, t, dir } = useLang();
   const [children, setChildren] = useState(null);
   const [family, setFamily] = useState(undefined);
@@ -64,9 +65,16 @@ export default function FamilyHome({ familyId, onOpenChild, onOpenSettings, onOp
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h1 className="disp" style={{ fontSize: 24, margin: 0 }}>{t("myChildren")}</h1>
-          <button onClick={logout} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: 999, padding: "8px 14px", fontSize: 12.5, cursor: "pointer" }}>
-            {t("logout")}
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            {onOpenAccount && (
+              <button onClick={onOpenAccount} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: 999, padding: "8px 14px", fontSize: 12.5, cursor: "pointer" }}>
+                {ACCOUNT_LABEL[lang] || ACCOUNT_LABEL.fr}
+              </button>
+            )}
+            <button onClick={logout} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: 999, padding: "8px 14px", fontSize: 12.5, cursor: "pointer" }}>
+              {t("logout")}
+            </button>
+          </div>
         </div>
       </div>
 
